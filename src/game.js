@@ -1,0 +1,657 @@
+// Driftwake - Main Game Loop & State
+
+
+import { GAME_CONFIG, DIFFICULTY, COLORS, CAPTAIN_LINES, STORAGE_KEY } from './config.js';
+import { createEngine, createMaterial, flat, enableShadows } from './engine.js';
+import { registerSeaShaders } from './shaders.js';
+import { createWater, updateWater, wave } from './water.js';
+import { createShip, updateShipBuoyancy } from './ship.js';
+import { createCaptain, createPip, createTarn, updateCharacters } from './characters.js';
+import { createIslands, updateIslandFoam, spawnChests, updateChests } from './world.js';
+import { createEnemies, placeEnemy, updateEnemies } from './enemies.js';
+import { createProjectiles, shoot, boom, tryFire, updateProjectiles } from './combat.js';
+import { createSplashSystem, createVWakeSystem, createSplinterSystem, createFireSystem,
+  updateSplashes, updateVWake, updateSplinters, updateFirePuffs,
+  spawnSplinters, spawnFire } from './effects.js';
+import { createGameFeel } from './gamefeel.js';
+import { initAudio, resumeAudio, playSfx, sfxHitEnemy, sfxHitPlayer, toggleMute, isMuted, setMuted } from './audio.js';
+import { saveGame, loadGame, resetSave } from './save.js';
+import { createInput } from './input.js';
+
+const { SEA_SIZE, SEA_DIVISIONS, TOTAL_CHESTS, ISLAND_COUNT } = GAME_CONFIG;
+const CELL = SEA_SIZE / SEA_DIVISIONS;
+
+export class DriftwakeGame {
+  constructor(canvas) {
+    this.canvas = canvas;
+    this.running = false;
+    this.paused = false;
+    this.tradeOpen = false;
+    
+    // Register shaders first
+    registerSeaShaders();
+    
+    // Engine & scene
+    const { engine, scene, camera, hemi, sun, lamp, skyColor, shadowGenerator } = createEngine(canvas);
+    this.shadowGenerator = shadowGenerator;
+    
+    // beamMat for day/night (used before chests exist)
+    this.beamMat = createMaterial(scene, '#ffc857', '#ffc857');
+    this.beamMat.disableLighting = true; this.beamMat.alpha = 0.35; this.beamMat.fogEnabled = false;
+    this.engine = engine;
+    this.scene = scene;
+    this.camera = camera;
+    this.hemi = hemi;
+    this.sun = sun;
+    this.lamp = lamp;
+    this.skyColor = skyColor;
+    
+    // Dev/cheat state
+    this.dev = { god: false, d: -1, fast: false };
+    
+    // Game state
+    this.st = {
+      run: false, won: false, got: 0, time: 0,
+      h: 0, sp: 0, lean: 0, x: 0, z: 0,
+      fx: 0, fz: 1, spd: 1, splashT: 0,
+      hp: 5, hpMax: 5, gold: 0, kills: 0,
+      diffKey: 'storm', up: { cannon: 0, hull: 0, sail: 0 },
+      bestTime: 0, waveT: 0, tarnSeen: false,
+      dt: 0, shipY: 0,
+    };
+    this.chests = [];
+    this.enemies = [];
+    
+    // Systems
+    this.D = DIFFICULTY.storm;
+    this.fireCd = 0;
+    this.lockT = null;
+    this.lockCam = true;
+    this.splashI = 0;
+    this.vwakeI = 0;
+    this.splI = 0;
+    this.fireI = 0;
+    
+    // Input
+    this.input = createInput();
+    this.setupInput();
+    
+    // Game feel
+    this.gameFeel = createGameFeel();
+    
+    // Audio
+    ['pointerdown', 'keydown'].forEach(n => addEventListener(n, () => { initAudio(); resumeAudio(); }));
+  }
+  
+  setupInput() {
+    const callbacks = {
+      onOrbit: (dx, dy) => {
+        this.orb.yaw += dx;
+        this.orb.pitch = Math.min(1.3, Math.max(0.12, this.orb.pitch + dy));
+        this.orb.idle = 0;
+      },
+      onZoom: (factor) => {
+        this.orb.dist = Math.min(40, Math.max(7, this.orb.dist * factor));
+        this.orb.idle = 0;
+      },
+      onPointerDown: () => { this.orb.idle = 0; },
+      onEscape: () => {
+        if (this.paused) this.closePause();
+        else if (this.st.run && !this.tradeOpen) this.openPause();
+      },
+    };
+    
+    const inputState = this.input.setup(this.canvas, callbacks);
+    this.keys = inputState.keys;
+    this.held = inputState.held;
+    this.getLockCam = inputState.getLockCam;
+    this.setLockCam = inputState.setLockCam;
+  }
+  
+  init() {
+    // Initialize all game objects
+    this.createWorld();
+    this.createEntities();
+    this.createEffects();
+    this.loadSave();
+    this.syncUI();
+    
+    // Start render loop
+    this.runRenderLoop();
+  }
+  
+  createWorld() {
+    const rnd = this.makeRNG();
+    
+    // Water
+    const water = createWater(this.scene, this.camera, this.skyColor, this.scene.fogDensity);
+    this.sea = water.sea;
+    this.seaMat = water.seaMat;
+    this.seaPositions = water.positions;
+    this.seaBasePositions = water.basePositions;
+    this.seaIndices = water.indices;
+    this.seaNormals = water.normals;
+    this.CELL = water.CELL;
+    
+    // Islands
+    this.islands = createIslands(this.scene, rnd);
+    
+    // Old Tarn (first island)
+    const ti = this.islands[0];
+    this.tarnX = ti.x + ti.r * 0.2;
+    this.tarnZ = ti.z;
+    this.tarn = createTarn(this.scene, this.tarnX, ti.r * 0.28, this.tarnZ);
+  }
+  
+  createEntities() {
+    // Ship
+    const ship = createShip(this.scene, this.shadowGenerator);
+    this.ship = ship.ship;
+    this.shipBody = ship.body;
+    this.lamp.parent = this.shipBody;
+    
+    // Characters
+    this.captain = createCaptain(this.scene, this.shipBody);
+    this.pip = createPip(this.scene);
+    this.pip.pipA = 0;
+    
+    // Enemies (raiders + Iron Warden) — hidden until a run places them
+    this.enemies = createEnemies(this.scene, this.D);
+    this.enemies.forEach(e => e.n.setEnabled(false));
+    
+    // Camera orbit state
+    this.orb = { yaw: 0, pitch: 0.42, dist: 17, h: 0, idle: 9, y: 0, lk: 0, la: 0, dd: 0 };
+  }
+  
+  createEffects() {
+    // Particle systems
+    const { splashes } = createSplashSystem(this.scene);
+    const { vwake } = createVWakeSystem(this.scene);
+    const splinters = createSplinterSystem(this.scene);
+    const firePuffs = createFireSystem(this.scene);
+    
+    this.splashes = splashes;
+    this.vwake = vwake;
+    this.splinters = splinters;
+    this.firePuffs = firePuffs;
+    
+    // Projectiles
+    const { balls, booms, ballMat, boomMat } = createProjectiles(this.scene);
+    this.balls = balls;
+    this.booms = booms;
+    this.ballMat = ballMat;
+    this.boomMat = boomMat;
+  }
+  
+  makeRNG() {
+    let seed = 11;
+    return () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+  }
+  
+  loadSave() {
+    const saved = loadGame();
+    if (saved) {
+      this.st.gold = saved.gold;
+      this.st.up = { cannon: 0, hull: 0, sail: 0, ...(saved.up || {}) };
+      this.st.bestTime = saved.bestTime;
+      this.st.diffKey = saved.diffKey || 'storm';
+      this.D = DIFFICULTY[this.st.diffKey] || DIFFICULTY.storm;
+      this.st.hpMax = 5 + 2 * (this.st.up.hull | 0);
+      this.st.hp = this.st.hpMax;
+    }
+    this.st.spd = 1 + 0.12 * (this.st.up.sail | 0);
+    this.syncModes();
+  }
+  
+  syncUI() {
+    this.updHud();
+    this.syncMute();
+    this.syncModes();
+  }
+  
+  // ===== UI Helpers =====
+  $(id) { return document.getElementById(id); }
+  
+  updHud() {
+    this.$('hpP').textContent = `Hull ${this.st.hp}/${this.st.hpMax}`;
+    this.$('goldP').textContent = `Gold ${this.st.gold} · Sunk ${this.st.kills}`;
+  }
+  
+  syncMute() {
+    this.$('muteBtn').textContent = isMuted() ? '🔇 Sound off' : '🔊 Sound on';
+  }
+  
+  syncModes() {
+    document.querySelectorAll('.mode').forEach(b => 
+      b.classList.toggle('on', b.dataset.m === this.st.diffKey)
+    );
+  }
+  
+  say(who, text, ms) {
+    const e = this.$('toast');
+    e.textContent = `${who}: ${text}`;
+    e.style.opacity = 1;
+    clearTimeout(this.toastT);
+    this.toastT = setTimeout(() => { e.style.opacity = 0; }, ms || 2800);
+  }
+  
+  fmt(s) { s = Math.floor(s); return Math.floor(s/60) + ':' + String(s%60).padStart(2,'0'); }
+  
+  // ===== Game Flow =====
+  newRun() {
+    window.__rerr = 0;
+    window.__eb = 0;
+    const banner = document.querySelector('[data-game-error]');
+    if (banner) banner.remove();
+    this.paused = false;
+    this.$('pauseM').style.display = 'none';
+    this.st.got = 0; this.st.time = 0; this.st.won = false; this.st.run = true;
+    this.st.x = 0; this.st.z = 0; this.st.h = 0; this.st.sp = 0; this.st.lean = 0;
+    this.st.tarnSeen = false; this.st.waveT = 0; this.st.splashT = 0;
+    this.chests = spawnChests(this.scene, this.makeRNG(), this.islands, this.chests);
+    this.resetCombat();
+    this.$('score').textContent = `Treasure 0/${TOTAL_CHESTS}`;
+    this.$('ov').style.display = 'none';
+    this.canvas.focus();
+    this.say('Captain Mara', `All hands — ${this.D.name}! Eight chests are out there.`, 3500);
+  }
+  
+  win() {
+    this.st.won = true; this.st.run = false;
+    if (!this.st.bestTime || this.st.time < this.st.bestTime) { this.st.bestTime = this.st.time; saveGame(this.st); }
+    this.$('ttl').textContent = 'Sea cleared';
+    this.$('msg').textContent = `All 8 chests aboard in ${this.fmt(this.st.time)}. Best: ${this.fmt(this.st.bestTime)}. The next chests are already glowing out there.`;
+    this.$('go').textContent = 'Sail again';
+    this.$('ov').style.display = 'flex';
+  }
+  
+  sunk() {
+    this.st.run = false;
+    this.$('ttl').textContent = 'Ship sunk';
+    this.$('msg').textContent = `The raiders sank you with ${this.st.got} of ${TOTAL_CHESTS} chests aboard on ${this.D.name}. Pick a sea and try again.`;
+    this.$('go').textContent = 'Try again';
+    this.$('ov').style.display = 'flex';
+  }
+  
+  resetCombat() {
+    this.st.hp = this.st.hpMax;
+    this.tradeOpen = false;
+    this.$('shop').style.display = 'none';
+    this.st.kills = 0;
+    this.lockT = null;
+    (this.enemies || []).forEach(e => {
+      e._pendingShots = [];
+      if (e.boss) { e.dead = 1e9; e.next = this.D.bossNext; e.n.setEnabled(false); }
+      else placeEnemy(e, this.st, this.islands, this.D);
+    });
+    (this.balls || []).forEach(b => { b.on = false; b.m.setEnabled(false); });
+    (this.booms || []).forEach(b => { b.l = 0; b.m.setEnabled(false); });
+    this.updHud();
+  }
+  
+  setDifficulty(key) {
+    if (!DIFFICULTY[key] || key === this.st.diffKey) return;
+    const mid = this.st.run && !this.st.won;
+    this.st.diffKey = key; this.D = DIFFICULTY[key];
+    this.syncModes(); saveGame(this.st);
+    if (mid) {
+      this.$('diffWarn').style.display = 'block';
+      this.say('Captain Mara', `Sea shifted to ${this.D.name}. You may need to restart this voyage.`, 3400);
+    }
+  }
+  
+  openPause() {
+    if (this.tradeOpen || this.$('ov').style.display === 'flex') return;
+    this.paused = true;
+    this.$('diffWarn').style.display = 'none';
+    this.syncMute(); this.syncModes();
+    this.$('pauseM').style.display = 'flex';
+  }
+  
+  closePause() {
+    this.paused = false;
+    this.$('pauseM').style.display = 'none';
+    this.canvas.focus();
+  }
+  
+  openShop() {
+    this.tradeOpen = true;
+    this.renderShop();
+    this.$('shop').style.display = 'flex';
+  }
+  
+  closeShop() {
+    this.tradeOpen = false;
+    this.$('shop').style.display = 'none';
+  }
+  
+  renderShop() {
+    ['cannon', 'hull', 'sail'].forEach(k => {
+      const b = this.$('b_' + k);
+      const cost = (30 + (k === 'hull' ? 10 : k === 'sail' ? 5 : 0)) * (this.st.up[k] + 1);
+      b.textContent = `${b.dataset.n} · Lv ${this.st.up[k]} · ${cost} gold`;
+      b.disabled = this.st.gold < cost || this.st.up[k] >= 4;
+    });
+    this.$('shopGold').textContent = `Gold: ${this.st.gold}`;
+  }
+  
+  buyUpgrade(k) {
+    const cost = (30 + (k === 'hull' ? 10 : k === 'sail' ? 5 : 0)) * (this.st.up[k] + 1);
+    if (this.st.gold < cost) return;
+    this.st.gold -= cost; this.st.up[k]++;
+    if (k === 'hull') { this.st.hpMax += 2; this.st.hp = this.st.hpMax; }
+    if (k === 'sail') this.st.spd = 1 + 0.12 * this.st.up.sail;
+    this.updHud(); this.renderShop(); playSfx('buy'); saveGame(this.st);
+    this.say('Old Tarn', 'Pleasure doing business!', 2000);
+  }
+  
+  // ===== Main Update =====
+  update(dt, t) {
+    this.st.dt = dt;
+    this.st.shipY = wave(this.st.x, this.st.z, t);
+    
+    // Water
+    updateWater(this.sea, this.seaMat, this.seaPositions, this.seaBasePositions, 
+      this.seaIndices, this.seaNormals, this.CELL, this.camera, this.st.x, this.st.z, t);
+    
+    // Input & Motion
+    this.handleInput(dt);
+    this.updateShipMotion(dt);
+    const wy = wave(this.st.x, this.st.z, t);
+    this.updateCamera(dt, t, wy);
+    
+    // Effects
+    const splash = updateSplashes(this.splashes, this.st, dt, t, wave, this.splashI);
+    this.splashI = splash.nextI; this.st.splashT = splash.splashT;
+    this.vwakeI = updateVWake(this.vwake, this.st, dt, t, wave, this.vwakeI);
+    updateSplinters(this.splinters, dt);
+    updateFirePuffs(this.firePuffs, dt);
+    
+    // Island foam
+    updateIslandFoam(this.islands, t, wave);
+    
+    // Forward vector (Pip + motion helpers)
+    this.st.fx = Math.sin(this.st.h);
+    this.st.fz = Math.cos(this.st.h);
+
+    // Characters
+    updateCharacters(this.captain, this.pip, this.tarn, this.st.x, this.st.z, this.st.h, wave, t, this.st, (who, text, ms) => this.say(who, text, ms));
+    
+    // Treasure
+    const chest = updateChests(this.chests, this.st, wave, t, dt,
+      (who, text, ms) => this.say(who, text, ms),
+      (name) => playSfx(name),
+      () => this.updHud(),
+      () => saveGame(this.st),
+      () => this.win(),
+      (got) => { this.$('score').textContent = `Treasure ${got}/${TOTAL_CHESTS}`; }
+    );
+    
+    if (chest.near && this.st.run) {
+      const rel = Math.atan2(chest.near.x - this.st.x, chest.near.z - this.st.z) - this.st.h;
+      this.$('arrow').style.transform = `rotate(${rel * 180 / Math.PI}deg)`;
+      this.$('dist').textContent = `${Math.round(chest.nd)} m`;
+    } else {
+      this.$('dist').textContent = '–';
+    }
+    
+    if (this.st.run && !this.st.won) { this.st.time += dt; this.$('time').textContent = this.fmt(this.st.time); }
+    
+    // Day/Night
+    this.updateDayNight(t);
+    
+    // Adaptive quality
+    this.adaptQuality(dt);
+  }
+  
+  handleInput(dt) {
+    let steer = 0, target = 0, rate = 0.8;
+    
+    if (this.st.run) {
+      if (this.keys.KeyA || this.keys.ArrowLeft || this.held.left) steer -= 1;
+      if (this.keys.KeyD || this.keys.ArrowRight || this.held.right) steer += 1;
+      if (this.keys.KeyW || this.keys.ArrowUp || this.held.sail) { target = 8 * this.st.spd; rate = 1.2; }
+      if (this.keys.Space || this.held.boost) { target = 15 * this.st.spd; rate = 1.5; }
+      if (this.keys.KeyS || this.keys.ArrowDown) { target = 0; rate = 3; }
+      if (this.keys.KeyQ) { this.orb.yaw -= dt * 1.6; this.orb.idle = 0; }
+      if (this.keys.KeyE) { this.orb.yaw += dt * 1.6; this.orb.idle = 0; }
+      if (this.keys.KeyL && !this.keys._lPressed) { 
+        this.keys._lPressed = true;
+        this.lockCam = !this.lockCam;
+        this.say('Camera', this.lockCam ? 'Target lock ON' : 'Target lock off', 1400);
+      } else if (!this.keys.KeyL) { this.keys._lPressed = false; }
+      if (this.keys.KeyF || this.held.fire) {
+        const fired = tryFire(this.st, this.scene, this.balls, this.ballMat,
+          this.lockCam, this.lockT, this.D, this.fireCd, this.st.up, playSfx, this.st.waveT);
+        this.fireCd = fired.fireCd;
+        if (fired.waveT != null) this.st.waveT = Math.max(this.st.waveT, fired.waveT);
+      }
+    }
+    
+    this.st.sp += (target - this.st.sp) * Math.min(1, dt * rate);
+    if (target === 0 && this.st.sp < 0.1) this.st.sp = 0;
+    this.st.h += steer * dt * 1.15 * (0.4 + this.st.sp / 14 * 0.6);
+    this.st.lean += (steer - this.st.lean) * Math.min(1, dt * 4);
+    this.st.x += Math.sin(this.st.h) * this.st.sp * dt;
+    this.st.z += Math.cos(this.st.h) * this.st.sp * dt;
+    
+    // Island collision
+    for (const i of this.islands) {
+      const dx = this.st.x - i.x, dz = this.st.z - i.z, d = Math.hypot(dx, dz), lim = i.r * 0.95 + 1.6;
+      if (d < lim) { this.st.x = i.x + dx / d * lim; this.st.z = i.z + dz / d * lim; this.st.sp *= 0.6; }
+    }
+  }
+  
+  updateShipMotion(dt) {
+    const wy = wave(this.st.x, this.st.z, this.T);
+    this.ship.position.set(this.st.x, wy + 0.1, this.st.z);
+    this.ship.rotation.y = this.st.h;
+    updateShipBuoyancy(this.shipBody, this.st.x, this.st.z, this.st.h, wave, this.T);
+  }
+  
+  updateCamera(dt, t, wy) {
+    const fx = Math.sin(this.st.h), fz = Math.cos(this.st.h);
+    this.orb.idle += dt;
+    this.orb.yaw = Math.atan2(Math.sin(this.orb.yaw), Math.cos(this.orb.yaw));
+    
+    const lk = this.lockCam && this.lockT && this.st.run && this.orb.idle > 1.2;
+    if (lk) {
+      const w = Math.atan2(this.lockT.x - this.st.x, this.lockT.z - this.st.z) - this.orb.h;
+      const dy = Math.atan2(Math.sin(w - this.orb.yaw), Math.cos(w - this.orb.yaw));
+      this.orb.yaw += dy * (1 - Math.exp(-dt * 4));
+      this.orb.pitch += (0.38 - this.orb.pitch) * (1 - Math.exp(-dt * 2));
+    } else if (this.orb.idle > 3.5) {
+      const r = 1 - Math.exp(-dt * 1.4);
+      this.orb.yaw -= this.orb.yaw * r;
+      this.orb.pitch += (0.42 - this.orb.pitch) * r;
+    }
+    this.orb.lk += ((lk ? 1 : 0) - this.orb.lk) * (1 - Math.exp(-dt * 3));
+    this.orb.h += Math.atan2(Math.sin(this.st.h - this.orb.h), Math.cos(this.st.h - this.orb.h)) * (1 - Math.exp(-dt * 3));
+    this.orb.y += (wy - this.orb.y) * (1 - Math.exp(-dt * 3));
+    
+    const ca = this.orb.h + this.orb.yaw;
+    const hz = this.orb.dist * Math.cos(this.orb.pitch);
+    this.camera.position.set(this.st.x - Math.sin(ca) * hz, this.orb.y + 2.2 + this.orb.dist * Math.sin(this.orb.pitch), this.st.z - Math.cos(ca) * hz);
+    
+    if (this.lockT) { this.orb.la = Math.atan2(this.lockT.x - this.st.x, this.lockT.z - this.st.z); this.orb.dd = Math.min(Math.hypot(this.lockT.x - this.st.x, this.lockT.z - this.st.z), 45); }
+    const ld = (this.lockT ? this.orb.dd : 0) * 0.42 * this.orb.lk;
+    this.camera.setTarget(new BABYLON.Vector3(this.st.x + Math.sin(this.orb.la || this.st.h) * ld, this.orb.y + 2.4, this.st.z + Math.cos(this.orb.la || this.st.h) * ld));
+    
+    // Tarn compass strip
+    this.updateTarnStrip();
+  }
+  
+  updateTarnStrip() {
+    const strip = this.$('strip');
+    const stripT = this.$('stripT');
+    const stripD = this.$('stripD');
+    const tdist = Math.hypot(this.tarnX - this.st.x, this.tarnZ - this.st.z);
+    
+    if (!this.st.run || this.tradeOpen) { strip.style.display = 'none'; return; }
+    strip.style.display = 'block';
+    
+    const fw = this.camera.getTarget().subtract(this.camera.position);
+    const camYaw = Math.atan2(fw.x, fw.z);
+    const want = Math.atan2(this.tarnX - this.st.x, this.tarnZ - this.st.z);
+    let rel = Math.atan2(Math.sin(want - camYaw), Math.cos(want - camYaw));
+    const half = 1.05;
+    const u = Math.max(0, Math.min(1, 0.5 + rel / (2 * half)));
+    stripT.style.left = `${u * 100}%`;
+    stripD.textContent = tdist < 38 ? 'Trade (T)' : `${Math.round(tdist)} m`;
+    stripT.classList.toggle('near', tdist < 38);
+  }
+  
+  updateDayNight(t) {
+    const d = this.dev?.d >= 0 ? this.dev.d : Math.max(0, Math.min(1, 0.5 + 0.8 * Math.sin(t * 0.042 + 1.2)));
+    const du = 1 - Math.abs(2 * d - 1);
+    const tmpC = new BABYLON.Color3();
+    const night = BABYLON.Color3.FromHexString('#0b1a33');
+    const dusk = BABYLON.Color3.FromHexString('#f2a36b');
+    BABYLON.Color3.LerpToRef(night, this.skyColor, d, tmpC);
+    BABYLON.Color3.LerpToRef(tmpC, dusk, du * 0.45, tmpC);
+    this.scene.clearColor.set(tmpC.r, tmpC.g, tmpC.b, 1);
+    this.scene.fogColor.copyFrom(tmpC);
+    this.seaMat.setColor3('fogCol', tmpC);
+    this.hemi.intensity = 0.3 + 0.7 * d;
+    this.sun.intensity = 0.1 + 0.45 * d;
+    this.seaMat.setFloat('dayK', d);
+    this.beamMat.alpha = 0.3 + 0.5 * (1 - d);
+    this.chests.forEach(c => {
+      const mats = c.node.getChildMeshes(false).map(m => m.material).filter(Boolean);
+      mats.forEach(m => { if (m.disableLighting && m.alpha != null) m.alpha = this.beamMat.alpha; });
+    });
+    this.lamp.intensity = 1.4 * (1 - d);
+  }
+  
+  adaptQuality(dt) {
+    this.fpsT = (this.fpsT || 0) + dt;
+    if (this.fpsT < 2.5) return;
+    this.fpsT = 0;
+    const f = this.engine.getFps();
+    const l = this.engine.getHardwareScalingLevel();
+    const mobile = /Android|iPhone|iPad|Mobi/i.test(navigator.userAgent);
+    const scMin = mobile ? Math.max(l, 0.67) : l;
+    const scMax = Math.max(1.6, scMin * 2.2);
+    if (f < 38 && l < scMax) this.engine.setHardwareScalingLevel(Math.min(scMax, l + 0.25));
+    else if (f > 57 && l > scMin) this.engine.setHardwareScalingLevel(Math.max(scMin, l - 0.25));
+  }
+  
+  extra(dt, t) {
+    this.updateDayNight(t);
+    this.adaptQuality(dt);
+    this.fireCd -= dt;
+    
+    // Enemies (only while sailing — they are placed in resetCombat/newRun)
+    if (this.st.run && this.enemies.length) {
+      updateEnemies(this.enemies, this.st, this.islands, this.D, dt, t, this.st.kills,
+        (booms, scene, mat, x, y, z) => boom(booms, scene, mat, x, y, z),
+        playSfx,
+        (who, text, ms) => this.say(who, text, ms),
+        () => this.updHud(),
+        () => saveGame(this.st)
+      );
+
+      // Fire pending enemy shots
+      this.enemies.forEach(e => {
+        if (!e._pendingShots || !e._pendingShots.length) return;
+        e._pendingShots.forEach(s => {
+          shoot(this.balls, this.scene, this.ballMat, s.x, s.y, s.z, s.tx, s.tz, false);
+        });
+        e._pendingShots.length = 0;
+      });
+    }
+    
+    // Projectiles
+    if (this.balls) {
+      updateProjectiles(this.balls, this.booms, this.st, this.enemies, dt, t, wave,
+        (booms, scene, mat, x, y, z) => boom(this.booms, this.scene, this.boomMat, x, y, z),
+        playSfx,
+        sfxHitEnemy,
+        sfxHitPlayer,
+        () => this.updHud(),
+        (who, text, ms) => this.say(who, text, ms),
+        () => this.sunk(),
+        () => saveGame(this.st),
+        (x, y, z, dir) => spawnSplinters(this.splinters, x, y, z, dir),
+        (x, y, z) => spawnFire(this.firePuffs, x, y, z),
+        this.dev
+      );
+    }
+    
+    // Trade prompt
+    const near = Math.hypot(this.tarnX - this.st.x, this.tarnZ - this.st.z) < 38;
+    this.$('trade').style.display = near && this.st.run && !this.tradeOpen ? 'block' : 'none';
+    
+    // HUD 3D
+    this.hud3d();
+  }
+  
+  hud3d() {
+    const scr = (x, y, z) => {
+      const f = this.camera.getTarget().subtract(this.camera.position);
+      if (BABYLON.Vector3.Dot(f, new BABYLON.Vector3(x - this.camera.position.x, y - this.camera.position.y, z - this.camera.position.z)) <= 0) return null;
+      const vp = this.camera.viewport.toGlobal(this.engine.getRenderWidth(), this.engine.getRenderHeight());
+      const p = BABYLON.Vector3.Project(new BABYLON.Vector3(x, y, z), BABYLON.Matrix.Identity(), this.scene.getTransformMatrix(), vp);
+      const k = this.canvas.clientWidth / this.engine.getRenderWidth();
+      return { x: p.x * k, y: p.y * k };
+    };
+    
+    const put = (el, p) => { if (!p) { el.style.display = 'none'; return; } el.style.display = 'block'; el.style.left = p.x + 'px'; el.style.top = p.y + 'px'; };
+    
+    // Player HP bar
+    put(this.$('meBar'), this.st.run ? scr(this.st.x, this.ship.position.y + 7.4, this.st.z) : null);
+    this.$('meBar').firstChild.style.width = Math.max(0, this.st.hp / this.st.hpMax * 100) + '%';
+    this.$('meBar').lastChild.textContent = `Hull ${this.st.hp}/${this.st.hpMax}`;
+    
+    // Enemy HP bars & lock crosshair
+    let tgt = null, bd = 60;
+    (this.enemies || []).forEach(e => {
+      if (e.x == null || e.z == null) return;
+      if (!e.bar) {
+        e.bar = document.createElement('div');
+        e.bar.className = 'hpb' + (e.boss ? ' boss' : '');
+        e.bar.innerHTML = '<i></i>' + (e.boss ? '<b>Iron Warden</b>' : '');
+        this.$('bars').appendChild(e.bar);
+      }
+      const d = Math.hypot(e.x - this.st.x, e.z - this.st.z);
+      put(e.bar, !e.dead && this.st.run && d < 130 ? scr(e.x, e.n.position.y + (e.boss ? 14 : 7.2), e.z) : null);
+      e.bar.firstChild.style.width = Math.max(0, e.hp / (e.max || 3) * 100) + '%';
+      if (!e.dead && d < bd) { bd = d; tgt = e; }
+    });
+    put(this.$('xh'), this.st.run && tgt ? scr(tgt.x, tgt.n.position.y + (tgt.boss ? 4.5 : 2.4), tgt.z) : null);
+    this.lockT = this.st.run ? tgt : null;
+  }
+  
+  // ===== Render Loop =====
+  runRenderLoop() {
+    this.T = 0;
+    this.engine.runRenderLoop(() => {
+      const dt = Math.min(this.engine.getDeltaTime() / 1000, 0.05);
+      try {
+        if (!this.paused) { this.T += dt; this.update(dt, this.T); this.extra(dt, this.T); this.gameFeel.update(dt, this.T, this.camera, this.engine.getDeltaTime() / 1000); }
+        else { this.updateDayNight(this.T); this.hud3d(); }
+        this.scene.render();
+      } catch (err) { if (!window.__rerr) { window.__rerr = 1; console.error(err); window.dispatchEvent(new ErrorEvent('error', { message: err.message, error: err })); } }
+    });
+    addEventListener('resize', () => this.engine.resize());
+  }
+  
+  // Dev cheat menu
+  initDev() {
+    const dev = this.dev;
+    const act = {
+      god: b => { dev.god = !dev.god; b.textContent = `God mode: ${dev.god ? 'ON' : 'off'}`; },
+      gold: () => { this.st.gold += 100; this.updHud(); },
+      heal: () => { this.st.hp = this.st.hpMax; this.updHud(); },
+      sink: () => { this.enemies.forEach(e => { if (!e.dead) { e.dead = 25; this.st.kills++; } }); this.updHud(); },
+      tp: () => { let c = null, bd = 1e9; (this.chests || []).forEach(q => { const d = Math.hypot(q.x - this.st.x, q.z - this.st.z); if (d < bd) { bd = d; c = q; } }); if (c) { this.st.x = c.x - 12; this.st.z = c.z - 12; } },
+      day: () => { dev.d = 1; }, night: () => { dev.d = 0; }, auto: () => { dev.d = -1; },
+      tpt: () => { this.st.x = this.tarnX - this.islands[0].r - 8; this.st.z = this.tarnZ - this.islands[0].r - 8; },
+      reset: () => { resetSave(); this.st.gold = 0; this.st.up = { cannon: 0, hull: 0, sail: 0 }; this.st.hpMax = 5; this.st.spd = 1; this.st.bestTime = 0; this.resetCombat(); },
+      fast: b => { dev.fast = !dev.fast; this.st.spd = dev.fast ? 3 : 1 + 0.12 * this.st.up.sail; b.textContent = `Turbo: ${dev.fast ? 'ON' : 'off'}`; }
+    };
+    if (/[?&]dev(=|&|$)/.test(location.search) || !/(netlify|vercel)\.app$/.test(location.hostname)) this.$('dev').style.display = 'flex';
+    document.querySelectorAll('#devP button').forEach(b => { b.onclick = () => { act[b.dataset.a](b); b.blur(); } });
+    this.$('devT').onclick = e => { const p = this.$('devP'); p.style.display = p.style.display === 'none' ? 'flex' : 'none'; e.target.blur(); };
+  }
+}

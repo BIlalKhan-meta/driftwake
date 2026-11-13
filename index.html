@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Driftwake</title>
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/babylonjs@7.30.0/babylon.js"></script>
+<style>
+:root{--bg:#9fd8e0;--ink:#0b2a35;--panel:rgba(11,42,53,.68);--text:#f7ebc6;--gold:#ffc857;--coral:#e4572e}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#9fd8e0;--ink:#071c24;--panel:rgba(7,28,36,.76);--text:#f7ebc6}}
+:root[data-theme="dark"]{--bg:#9fd8e0;--ink:#071c24;--panel:rgba(7,28,36,.76);--text:#f7ebc6}
+html,body{height:100%;margin:0;overflow:hidden;background:var(--bg);font-family:Fredoka,system-ui,sans-serif;color:var(--text);-webkit-user-select:none;user-select:none}
+#c{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:none;outline:none}
+.pill{position:fixed;background:var(--panel);border-radius:999px;padding:8px 16px;font-size:18px;font-weight:700}
+#score{top:calc(env(safe-area-inset-top,0px) + 12px);left:12px}
+#time{top:calc(env(safe-area-inset-top,0px) + 12px);left:50%;transform:translateX(-50%)}
+#compass{position:fixed;top:calc(env(safe-area-inset-top,0px) + 12px);right:12px;width:64px;text-align:center;background:var(--panel);border-radius:18px;padding:6px 0 4px}
+#arrow{width:0;height:0;margin:2px auto;border-left:11px solid transparent;border-right:11px solid transparent;border-bottom:26px solid var(--gold)}
+#dist{font-size:13px}
+#strip{position:fixed;top:calc(env(safe-area-inset-top,0px) + 52px);left:50%;transform:translateX(-50%);width:min(440px,72vw);height:44px;pointer-events:none;display:none;z-index:5}
+#strip::before{content:'';position:absolute;left:0;right:0;top:28px;height:2px;background:linear-gradient(90deg,transparent,rgba(247,235,198,.85) 8%,rgba(247,235,198,.85) 92%,transparent);box-shadow:0 0 6px rgba(247,235,198,.35)}
+#strip::after{content:'';position:absolute;left:50%;top:24px;width:10px;height:10px;margin-left:-5px;background:var(--text);transform:rotate(45deg);box-shadow:0 0 6px rgba(247,235,198,.5)}
+#stripT{position:absolute;top:0;left:50%;transform:translateX(-50%);text-align:center;will-change:left}
+#stripD{display:block;font:700 13px Fredoka,system-ui,sans-serif;color:var(--text);text-shadow:0 1px 3px #000;line-height:1;margin-bottom:2px}
+#stripI{display:block;width:22px;height:22px;margin:0 auto;background:var(--gold);color:var(--ink);font:700 12px Fredoka,system-ui,sans-serif;line-height:22px;transform:rotate(45deg);box-shadow:0 0 8px rgba(255,200,87,.55)}
+#stripI b{display:block;transform:rotate(-45deg)}
+#stripT.near #stripI{background:var(--coral);box-shadow:0 0 10px rgba(228,87,46,.6)}
+.ctl{position:fixed;bottom:calc(env(safe-area-inset-bottom,0px) + 18px);width:78px;height:78px;border-radius:50%;border:0;background:var(--panel);color:var(--text);font:700 30px Fredoka,system-ui,sans-serif;touch-action:none;display:none}
+.ctl:active,.ctl.on{background:var(--coral)}
+#hpP{top:calc(env(safe-area-inset-top,0px) + 56px);left:12px}
+#goldP{top:calc(env(safe-area-inset-top,0px) + 100px);left:12px}
+#bfire{right:16px;bottom:calc(env(safe-area-inset-bottom,0px) + 106px);font-size:16px}
+.buy{display:block;width:100%;margin:8px 0;font:500 17px Fredoka,system-ui,sans-serif;background:var(--panel);color:var(--text);border:2px solid var(--gold);border-radius:14px;padding:10px;cursor:pointer}
+.buy:disabled{opacity:.45;cursor:default}
+#bars{position:fixed;inset:0;pointer-events:none;overflow:hidden}
+.hpb{position:absolute;display:none;box-sizing:border-box;width:64px;height:11px;margin:-5px 0 0 -32px;border-radius:7px;background:rgba(7,28,36,.78);padding:2px}
+.hpb i{display:block;height:100%;border-radius:5px;background:var(--coral);width:100%}
+.hpb.me{width:96px;height:13px;margin-left:-48px}.hpb.me i{background:#6fdc8c}
+.hpb b{position:absolute;left:0;right:0;top:-20px;text-align:center;font:700 14px Fredoka,system-ui,sans-serif;color:var(--text);text-shadow:0 1px 3px #000}
+#xh{position:absolute;display:none;width:58px;height:58px;margin:-29px 0 0 -29px;border:3px solid var(--coral);border-radius:50%;box-sizing:border-box}
+#xh::before,#xh::after{content:'';position:absolute;background:var(--coral)}
+#xh::before{left:50%;top:-10px;bottom:-10px;width:3px;margin-left:-1.5px}
+#xh::after{top:50%;left:-10px;right:-10px;height:3px;margin-top:-1.5px}
+#dev{position:fixed;right:12px;bottom:calc(env(safe-area-inset-bottom,0px) + 12px);display:flex;flex-direction:column;align-items:flex-end;gap:6px}
+#devP{flex-direction:column;gap:4px;align-items:stretch}
+#dev .row{display:flex;gap:4px}
+button.pill{border:0;color:var(--text);font-family:inherit;cursor:pointer}
+#pauseBtn{top:calc(env(safe-area-inset-top,0px) + 100px);right:12px;font-size:18px;padding:6px 12px}
+#pauseM{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(7,28,36,.55);padding:20px;z-index:20}
+#card3{max-width:380px;width:100%;background:var(--ink);border-radius:22px;padding:28px 26px;text-align:center}
+#card3 h1{margin:0 0 8px;font-size:36px;color:var(--gold)}
+#card3 .lab{margin:14px 0 8px;font-size:14px;opacity:.85}
+#muteBtn{display:block;width:100%;margin:4px 0 8px;font:700 16px Fredoka,system-ui,sans-serif;background:var(--panel);color:var(--text);border:2px solid var(--gold);border-radius:14px;padding:10px;cursor:pointer}
+#diffWarn{display:none;margin:10px 0 0;font-size:14px;line-height:1.35;color:var(--coral)}
+#resume{font:700 18px Fredoka,system-ui,sans-serif;background:var(--gold);color:var(--ink);border:0;border-radius:999px;padding:12px 28px;cursor:pointer;margin-top:16px}
+#fb{bottom:calc(env(safe-area-inset-bottom,0px) + 58px);left:12px;font-size:14px;color:var(--text);text-decoration:none;padding:6px 14px}
+@media (hover:none){#fb{display:none}}
+#blk{right:104px;bottom:calc(env(safe-area-inset-bottom,0px) + 106px);font-size:16px}
+.hpb.boss{width:170px;height:15px;margin-left:-85px}
+.hpb.boss b{top:-22px;color:var(--gold)}
+#dev button{font:500 13px Fredoka,system-ui,sans-serif;background:var(--panel);color:var(--text);border:1px solid var(--gold);border-radius:10px;padding:6px 10px;cursor:pointer}
+@media (hover:none){#dev{bottom:calc(env(safe-area-inset-bottom,0px) + 200px)}}
+#bl{left:16px}#br{left:104px}#bf{right:16px;font-size:16px}#bb{right:104px;font-size:16px}
+@media (hover:none){.ctl{display:block}}
+#hint{position:fixed;bottom:calc(env(safe-area-inset-bottom,0px) + 14px);left:50%;transform:translateX(-50%);font-size:14px;background:var(--panel);padding:6px 14px;border-radius:999px;white-space:nowrap}
+@media (hover:none){#hint{display:none}}
+#toast{top:calc(env(safe-area-inset-top,0px) + 150px);left:50%;transform:translateX(-50%);max-width:86vw;text-align:center;font-size:16px;font-weight:500;border-radius:18px;opacity:0;transition:opacity .3s;pointer-events:none}
+#ov,#shop{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(7,28,36,.55);padding:20px}
+#card,#card2{max-width:380px;background:var(--ink);border-radius:22px;padding:28px 26px;text-align:center}
+#card h1{margin:0 0 8px;font-size:44px;line-height:1.05;color:var(--gold)}
+#card p{margin:0 0 20px;font-size:17px;line-height:1.45}
+#go{font:700 20px Fredoka,system-ui,sans-serif;background:var(--gold);color:var(--ink);border:0;border-radius:999px;padding:12px 30px;cursor:pointer}
+#modes,.modes{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin:0 0 16px}
+.mode{font:700 14px Fredoka,system-ui,sans-serif;background:transparent;color:var(--text);border:2px solid rgba(247,235,198,.35);border-radius:999px;padding:8px 14px;cursor:pointer}
+.mode.on{border-color:var(--gold);background:rgba(255,200,87,.18);color:var(--gold)}
+.mode:focus-visible{outline:3px solid var(--text);outline-offset:2px}
+#go:focus-visible,.ctl:focus-visible{outline:3px solid var(--text);outline-offset:3px}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<canvas id="c" tabindex="0"></canvas>
+<div class="pill" id="score">Treasure 0/8</div>
+<div class="pill" id="time">0:00</div>
+<div id="strip" aria-label="Old Tarn compass"><div id="stripT"><span id="stripD">–</span><i id="stripI"><b>⚓</b></i></div></div>
+<div id="compass"><div id="arrow"></div><div id="dist">–</div></div>
+<div id="hint">A / D steer · W sail · Space boost · F fire · L lock = broadside · Esc pause · M mute · T trade · S brake · drag to look around</div>
+<div class="pill" id="toast"></div>
+<div class="pill" id="hpP">Hull 5/5</div><div class="pill" id="goldP">Gold 0</div>
+<button class="pill" id="trade" style="display:none;top:auto;bottom:calc(env(safe-area-inset-bottom,0px) + 110px);left:50%;transform:translateX(-50%);border:0;color:var(--text);font:700 18px Fredoka,system-ui,sans-serif;cursor:pointer">Trade with Tarn (T)</button>
+<button class="ctl" id="bfire" aria-label="Fire cannon">Fire</button>
+<button class="ctl" id="blk" aria-label="Toggle target lock">Lock</button>
+<button class="pill" id="pauseBtn" aria-label="Pause">⏸</button>
+<a class="pill" id="fb" href="https://docs.google.com/forms/d/1D0_esQP5L6ig8TYcIHsggh7rn8uDmVVGdeMUYV0Qefg/viewform" target="_blank" rel="noopener">Send feedback</a>
+<div id="bars"><div class="hpb me" id="meBar"><i></i><b></b></div><div id="xh"></div></div>
+<div id="dev" style="display:none"><div id="devP" style="display:none"><button data-a="god">God mode: off</button><button data-a="gold">+100 gold</button><button data-a="heal">Full heal</button><button data-a="sink">Sink all raiders</button><button data-a="tp">Teleport to treasure</button><button data-a="fast">Turbo: off</button><button data-a="reset">Reset save</button><button data-a="tpt">Teleport to Tarn</button><div class="row"><button data-a="day">Day</button><button data-a="night">Night</button><button data-a="auto">Auto</button></div></div><button id="devT">DEV</button></div>
+<div id="shop" style="display:none"><div id="card2"><h1 style="margin:0 0 4px;font-size:32px;color:var(--gold)">Old Tarn's stall</h1><p id="shopGold" style="margin:0 0 10px"></p><button class="buy" id="b_cannon" data-n="Faster cannons"></button><button class="buy" id="b_hull" data-n="Stronger hull"></button><button class="buy" id="b_sail" data-n="Bigger sails"></button><button class="buy" id="shut" style="border-color:transparent">Back to sea</button></div></div>
+<div id="pauseM"><div id="card3">
+  <h1>Paused</h1>
+  <p class="lab">Sound</p>
+  <button type="button" id="muteBtn">🔊 Sound on</button>
+  <p class="lab">Sea</p>
+  <div id="modesP" class="modes" role="group" aria-label="Sea difficulty">
+    <button type="button" class="mode" data-m="soft" title="Auto-aim cannons, slower raiders">Soft Tide</button>
+    <button type="button" class="mode" data-m="storm" title="Auto-aim cannons, flanking raiders">Storm Wake</button>
+    <button type="button" class="mode" data-m="dread" title="No auto-aim — aim the bow. Fierce Warden">Dreadwake</button>
+  </div>
+  <p id="diffWarn">Changing seas mid-voyage may need a restart for raiders to fully match.</p>
+  <button type="button" id="resume">Resume</button>
+</div></div>
+<button class="ctl" id="bl" aria-label="Steer left">◀</button>
+<button class="ctl" id="br" aria-label="Steer right">▶</button>
+<button class="ctl" id="bf" aria-label="Sail">Sail</button>
+<button class="ctl" id="bb" aria-label="Boost">Boost</button>
+<div id="ov"><div id="card">
+<h1 id="ttl">Driftwake</h1>
+<p id="msg">Sail your sloop between the islands and gather all 8 treasure chests. Captain Mara and her bird Pip are aboard, and Old Tarn waits on a far island.</p>
+<div id="modes" role="group" aria-label="Sea difficulty">
+  <button type="button" class="mode" data-m="soft" title="Auto-aim cannons, slower raiders">Soft Tide</button>
+  <button type="button" class="mode on" data-m="storm" title="Auto-aim cannons, flanking raiders">Storm Wake</button>
+  <button type="button" class="mode" data-m="dread" title="No auto-aim — aim the bow. Fierce Warden">Dreadwake</button>
+</div>
+<button id="go">Set sail</button>
+<p style="margin:16px 0 0;font-size:14px"><a href="https://docs.google.com/forms/d/1D0_esQP5L6ig8TYcIHsggh7rn8uDmVVGdeMUYV0Qefg/viewform" target="_blank" rel="noopener" style="color:var(--gold)">Send feedback</a> · <a href="mailto:bilalkhan.mfl@gmail.com?subject=Driftwake%20feedback" style="color:var(--gold)">Email us</a></p>
+</div></div>
+
+<script type="module">
+import { DriftwakeGame } from './src/game.js';
+
+const canvas = document.getElementById('c');
+const game = new DriftwakeGame(canvas);
+game.init();
+game.initDev();
+
+// Global error handler
+window.addEventListener('error', e => {
+  if (window.__eb) return; window.__eb = 1;
+  const d = document.createElement('div');
+  d.dataset.gameError = '1';
+  d.style.cssText = 'position:fixed;left:8px;right:8px;bottom:8px;z-index:99;background:#7a1020;color:#fff;font:12px monospace;padding:8px 10px;border-radius:8px;white-space:pre-wrap;max-height:30vh;overflow:auto';
+  d.textContent = 'Game error: ' + e.message + (e.error && e.error.stack ? '\n' + e.error.stack.split('\n').slice(0,4).join('\n') : '') + '\nPlease screenshot this and send it to the developer.';
+  document.body.appendChild(d);
+});
+
+// Button wiring
+document.getElementById('go').onclick = () => game.newRun();
+document.getElementById('resume').onclick = () => game.closePause();
+document.getElementById('pauseBtn').onclick = e => { game.paused ? game.closePause() : game.openPause(); e.currentTarget.blur(); };
+document.getElementById('muteBtn').onclick = e => { import('./src/audio.js').then(m => { m.toggleMute(); game.syncMute(); e.currentTarget.blur(); }); };
+document.getElementById('shut').onclick = () => game.closeShop();
+document.getElementById('trade').onclick = () => game.openShop();
+['cannon','hull','sail'].forEach(k => document.getElementById('b_'+k).onclick = () => game.buyUpgrade(k));
+document.getElementById('blk').onclick = e => { game.lockCam = !game.lockCam; e.currentTarget.classList.toggle('on', game.lockCam); game.say('Camera', game.lockCam ? 'Target lock ON' : 'Target lock off', 1400); };
+document.querySelectorAll('.mode').forEach(b => b.onclick = () => game.setDifficulty(b.dataset.m));
+document.addEventListener('keydown', e => { if (e.code === 'KeyM' && !e.repeat) { import('./src/audio.js').then(m => { m.toggleMute(); game.syncMute(); }); } });
+document.addEventListener('keydown', e => { if (e.code === 'KeyT' && !e.repeat && game.st.run) { if (game.tradeOpen) game.closeShop(); else if (Math.hypot(game.tarnX - game.st.x, game.tarnZ - game.st.z) < 38) game.openShop(); else game.say('Captain Mara', "Old Tarn's island is too far. Line up the ⚓ on the compass!", 2600); } });
+</script>
+</body>
+</html>

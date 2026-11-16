@@ -119,6 +119,7 @@ export class DriftwakeGame {
     this.dev = { god: false, d: -1, fast: false };
     
     // Game state
+    this.flashTimer = 0;
     this.st = {
       run: false, won: false, got: 0, time: 0,
       h: 0, sp: 0, lean: 0, x: 0, z: 0,
@@ -305,6 +306,16 @@ export class DriftwakeGame {
     this.$('hpP').textContent = `Hull ${this.st.hp}/${this.st.hpMax}`;
     this.$('goldP').textContent = `Gold ${this.st.gold} · Sunk ${this.st.kills}`;
     this.$('score').textContent = `Treasure ${this.st.got}/${TOTAL_CHESTS}`;
+
+    // Screen effects - vignette on low HP
+    const vignette = this.$('vignette');
+    const hpRatio = this.st.hp / this.st.hpMax;
+    if (hpRatio < 0.4 && vignette) {
+      vignette.style.display = 'block';
+      vignette.style.opacity = (0.4 - hpRatio) / 0.4;
+    } else if (vignette) {
+      vignette.style.display = 'none';
+    }
     
     // Update Babylon.js GUI HUD elements (supplementary)
     if (this.hudGold) this.hudGold.text = `Gold ${this.st.gold} · Sunk ${this.st.kills}`;
@@ -406,6 +417,7 @@ export class DriftwakeGame {
   showTarnModal() {
     const modal = this.$('tarnModal');
     modal.style.display = 'flex';
+      modal.classList.add('pop-in');
     this.paused = true;
     
     // Reset to quests tab
@@ -517,6 +529,7 @@ export class DriftwakeGame {
     rewardEl.textContent = 'Reward: ' + reward + ' Gold';
     
     modal.style.display = 'flex';
+      modal.classList.add('pop-in');
     this.paused = true;
     
     const closeBtn = this.$('questCompleteClose');
@@ -826,7 +839,7 @@ export class DriftwakeGame {
     const wy = wave(this.st.x, this.st.z, this.T);
     this.ship.position.set(this.st.x, wy + 0.1, this.st.z);
     this.ship.rotation.y = this.st.h;
-    updateShipBuoyancy(this.shipBody, this.st.x, this.st.z, this.st.h, wave, this.T);
+    updateShipBuoyancy(this.shipBody, this.st.x, this.st.z, this.st.h, wave, this.T, dt, this.st.lean, this.st.sp);
   }
   
   updateCamera(dt, t, wy) {
@@ -964,10 +977,30 @@ export class DriftwakeGame {
         (x, y, z, dir) => spawnSplinters(this.splinters, x, y, z, dir),
         (x, y, z) => spawnFire(this.firePuffs, x, y, z),
         this.dev,
-        (x, y, z, text, color) => spawnDamageNumber(this.damageNumbers, x, y, z, text, color)
+        (x, y, z, text, color) => spawnDamageNumber(this.damageNumbers, x, y, z, text, color),
+        this.gameFeel
       );
     }
     
+    // Screen flash on damage
+    if (this.flashTimer > 0) {
+      this.flashTimer -= dt;
+      const flash = this.$('screenFlash');
+      if (flash) {
+        flash.style.display = 'block';
+        flash.style.opacity = Math.max(0, this.flashTimer / 0.3);
+      }
+    } else {
+      const flash = this.$('screenFlash');
+      if (flash) flash.style.display = 'none';
+    }
+
+    // Flash on damage
+    if (this.st.hp < this.lastHp) {
+      this.flashTimer = 0.3;
+    }
+    this.lastHp = this.st.hp;
+
     // Trade prompt
     const near = Math.hypot(this.tarnX - this.st.x, this.tarnZ - this.st.z) < 38;
     this.$('trade').style.display = near && this.st.run && !this.tradeOpen ? 'block' : 'none';

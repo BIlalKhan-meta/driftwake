@@ -86,10 +86,10 @@ export function createShip(scene, shadowGenerator = null) {
     }
   });
   
-  return { ship, body };
+  return { ship, body, squash: 1, stretch: 1 };
 }
 
-export function updateShipBuoyancy(body, shipX, shipZ, shipH, waveFunc, t) {
+export function updateShipBuoyancy(body, shipX, shipZ, shipH, waveFunc, t, dt, lean = 0, spd = 1) {
   const cr = Math.cos(shipH), sr = Math.sin(shipH);
   
   const hB = waveFunc(shipX + sr * 2.4, shipZ + cr * 2.4, t);
@@ -99,4 +99,24 @@ export function updateShipBuoyancy(body, shipX, shipZ, shipH, waveFunc, t) {
   
   body.rotation.x = -Math.atan2(hB - hS, 4.8) * 1.3;
   body.rotation.z = Math.atan2(hR - hL, 2.2) * 1.3;
+  
+  // Squash & Stretch based on lean (turning) and speed
+  const leanAmount = Math.abs(lean);
+  
+  // When turning: squash vertically, stretch horizontally
+  const targetSquash = 1 - leanAmount * 0.15; // Squash down when leaning
+  const targetStretch = 1 + leanAmount * 0.08; // Stretch out when leaning
+  
+  // Smooth interpolation
+  body.scaling.x += (targetStretch - body.scaling.x) * Math.min(1, dt * 10);
+  body.scaling.z += (targetStretch - body.scaling.z) * Math.min(1, dt * 10);
+  body.scaling.y += (targetSquash - body.scaling.y) * Math.min(1, dt * 10);
+  
+  // Wave impact squash (bounce when hitting waves)
+  const waveImpact = Math.abs(hB - hS) * 0.5;
+  if (waveImpact > 0.3) {
+    body.scaling.y = Math.max(0.7, 1 - waveImpact * 0.3); // Temporary squash
+    body.scaling.x = Math.min(1.3, 1 + waveImpact * 0.2); // Temporary stretch
+    body.scaling.z = Math.min(1.3, 1 + waveImpact * 0.2);
+  }
 }

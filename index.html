@@ -103,6 +103,37 @@ button.pill{cursor:pointer}
 // Interactive elements cursor
 #trade,#pauseBtn,#blk,#bfire,#bl,#br,#bf,#bb{cursor:pointer}
 
+// Juicy UI Animations
+button.pill{transition:all 0.15s cubic-bezier(0.175, 0.885, 0.32, 1.275)}
+button.pill:active{transform:scale(0.95)}
+button.pill:hover{transform:scale(1.05)}
+
+.mode{transition:all 0.2s ease}
+.mode:hover{transform:scale(1.05);border-color:var(--gold)}
+.mode.on{transform:scale(1.1)}
+
+#toast{transition:all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275)}
+#toast.show{transform:scale(1.05)}
+
+.buy{transition:all 0.2s ease}
+.buy:hover{transform:scale(1.05);border-color:var(--gold)}
+.buy:active{transform:scale(0.95)}
+
+@keyframes popIn {
+  0% { transform: scale(0); opacity: 0; }
+  70% { transform: scale(1.1); }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+.pop-in{animation:popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275)}
+
+@keyframes bounce {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-5px); }
+}
+
+.bounce{animation:bounce 0.5s ease-in-out}
+
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 #quest{top:calc(env(safe-area-inset-top,0px) + 220px);left:12px;font:700 14px Fredoka,system-ui,sans-serif;color:var(--text);background:var(--panel);border-radius:12px;padding:6px 12px;max-width:280px;word-wrap:break-word;z-index:5}
 #combo{top:calc(env(safe-area-inset-top,0px) + 180px);left:12px;font-size:24px;font-weight:800;color:var(--coral);opacity:0;transition:opacity .2s}
@@ -116,6 +147,10 @@ button.pill{cursor:pointer}
 <div id="strip" aria-label="Old Tarn compass"><div id="stripT"><span id="stripD">–</span><i id="stripI"><b>⚓</b></i></div></div>
 <div id="compass"><div id="arrow"></div><div id="dist">–</div></div>
 <div id="hint">A / D steer · W sail · Space boost · F fire · L lock = broadside · Esc pause · M mute · T trade · S brake · drag to look around</div>
+
+<!-- Screen Effects -->
+<div id="screenFlash" style="display:none;position:fixed;inset:0;z-index:100;background:rgba(255,255,255,0.8);pointer-events:none"></div>
+<div id="vignette" style="display:none;position:fixed;inset:0;z-index:95;background:radial-gradient(circle, transparent 60%, rgba(0,0,0,0.8) 100%);pointer-events:none;transition:opacity 0.5s"></div>
 <div class="pill" id="toast"></div>
 <div class="pill" id="hpP">Hull 5/5</div><div class="pill" id="combo">×</div><div id="quest" style="display:none"></div><div class="pill" id="goldP">Gold 0</div><div class="pill" id="questHUD" style="display:none;top:calc(env(safe-area-inset-top,0px) + 56px);left:12px;font-size:14px;padding:6px 12px"></div>
 <button class="pill" id="trade" style="display:none;top:auto;bottom:calc(env(safe-area-inset-bottom,0px) + 110px);left:50%;transform:translateX(-50%);border:0;color:var(--text);font:700 18px Fredoka,system-ui,sans-serif;cursor:pointer">Trade with Tarn (T)</button>

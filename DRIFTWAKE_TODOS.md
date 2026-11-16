@@ -108,7 +108,7 @@
 
 **Goal**: Make every action feel impactful and satisfying
 
-### Task 3.1: Screen Shake System
+### Task 3.1: Screen Shake System ✅ COMPLETED
 - [ ] Trauma-based screen shake
 - [ ] Shake on cannon hits
 - [ ] Shake on explosions
@@ -116,21 +116,21 @@
 
 **Files**: `src/gamefeel.js`, `src/combat.js`
 
-### Task 3.2: Hit-Stop / Freeze Frames
+### Task 3.2: Hit-Stop / Freeze Frames ✅ COMPLETED
 - [ ] Brief freeze on cannon impact
 - [ ] Freeze duration based on hit power
 - [ ] Visual flash on impact
 
 **Files**: `src/combat.js`, `src/gamefeel.js`
 
-### Task 3.3: Squash & Stretch
+### Task 3.3: Squash ### Task 3.3: Squash & Stretch Stretch ✅ COMPLETED
 - [ ] Ship buoyancy exaggeration on waves
 - [ ] Ship lean on sharp turns
 - [ ] Ship bounce on island collision
 
 **Files**: `src/ship.js`, `src/game.js`
 
-### Task 3.4: Juicy UI
+### Task 3.4: Juicy UI ✅ COMPLETED
 - [ ] Pop animations on buttons
 - [ ] Bounce effects on notifications
 - [ ] Smooth slide-in/out for panels
@@ -138,7 +138,7 @@
 
 **Files**: `index.html`, `src/game.js`
 
-### Task 3.5: Screen Effects
+### Task 3.5: Screen Effects ✅ COMPLETED
 - [ ] Vignette on low health
 - [ ] Chromatic aberration on damage
 - [ ] Screen flash on taking hit

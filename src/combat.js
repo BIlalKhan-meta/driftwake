@@ -84,7 +84,7 @@ export function tryFire(st, scene, balls, ballMat, lockCam, lockT, D, fireCd, up
   return { fireCd, waveT };
 }
 
-export function updateProjectiles(balls, booms, st, enemies, dt, t, waveFunc, boom, sfx, sfxHitEnemy, sfxHitPlayer, updHud, say, sunk, save, spawnSplinters, spawnFire, dev, spawnDmg) {
+export function updateProjectiles(balls, booms, st, enemies, dt, t, waveFunc, boom, sfx, sfxHitEnemy, sfxHitPlayer, updHud, say, sunk, save, spawnSplinters, spawnFire, dev, spawnDmg, gameFeel) {
   balls.forEach(b => {
     if (!b.on) return;
     b.vy -= 14 * dt;
@@ -98,6 +98,9 @@ export function updateProjectiles(balls, booms, st, enemies, dt, t, waveFunc, bo
       enemies.forEach(e => {
         if (!e.dead && !hit && Math.hypot(e.x - p.x, e.z - p.z) < (e.boss ? 5.5 : 3) && p.y < (e.boss ? 10 : 6) && p.y > -0.5) {
           hit = true; e.hp--; boom(booms, b.m.getScene(), b.m.material, p.x, p.y, p.z); sfxHitEnemy();
+          // Screen shake on hit
+          if (gameFeel) gameFeel.addTrauma(0.25);
+          if (gameFeel) gameFeel.hitStop(0.05);
           const dir = new BABYLON.Vector3(e.x - p.x, 0, e.z - p.z); dir.normalize();
           spawnSplinters(p.x, p.y, p.z, dir);
           spawnFire(p.x, p.y + 1.2, p.z);
@@ -120,6 +123,9 @@ export function updateProjectiles(balls, booms, st, enemies, dt, t, waveFunc, bo
       });
     } else if (Math.hypot(st.x - p.x, st.z - p.z) < 2.6 && p.y < 5.5 && p.y > -0.5) {
       hit = true; if (!dev.god) st.hp--; boom(booms, b.m.getScene(), b.m.material, p.x, p.y, p.z); sfxHitPlayer(); updHud();
+      // Screen shake and hitstop on player hit
+      if (gameFeel) gameFeel.addTrauma(0.4);
+      if (gameFeel) gameFeel.hitStop(0.08);
       say('Captain Mara', 'Hull hit! Keep moving!', 1800); if (st.hp <= 0) sunk();
     }
     

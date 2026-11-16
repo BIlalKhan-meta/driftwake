@@ -109,7 +109,7 @@ export function spawnChests(scene, rnd, islands, existingChests = []) {
   return chests;
 }
 
-export function updateChests(chests, st, waveFunc, t, dt, say, sfx, updHud, save, onWin, onScore) {
+export function updateChests(chests, st, waveFunc, t, dt, say, sfx, updHud, save, onWin, onScore, onQuestProgress) {
   let near = null, nd = 1e9;
   if (!chests || !chests.length) return { near, nd };
 
@@ -131,6 +131,10 @@ export function updateChests(chests, st, waveFunc, t, dt, say, sfx, updHud, save
       sfx('coin');
       save();
       say('Captain Mara', CAPTAIN_LINES[st.got % CAPTAIN_LINES.length], 2600);
+      
+      // Quest progress for treasure
+      if (onQuestProgress) onQuestProgress('treasure', 1);
+      
       if (st.got >= TOTAL_CHESTS) onWin();
       else st.waveT = 1.6;
     }

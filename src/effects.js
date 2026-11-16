@@ -9,6 +9,7 @@ const { particles } = COLORS;
 
 let splI = 0;
 let fireI = 0;
+let dmgI = 0;
 
 export function createSplashSystem(scene) {
   const splashMat = createMaterial(scene, particles.splash, particles.splash);
@@ -165,4 +166,49 @@ export function spawnFire(firePuffs, x, y, z) {
     f.v.set((Math.random() - 0.5) * 0.8, 0.3 + Math.random() * 0.6, (Math.random() - 0.5) * 0.8);
     f.scaling.set(0.3, 0.3, 0.3); f.material.alpha = 0.5; f.visibility = 1;
   }
+}
+
+// Damage Numbers UI System
+export function createDamageNumbers() {
+  const dmgNums = [];
+  for (let k = 0; k < 30; k++) {
+    const n = document.createElement('div');
+    n.className = 'dmg';
+    n.style.cssText = 'position:absolute;pointer-events:none;font:700 14px Fredoka,system-ui,sans-serif;color:#ff4444;text-shadow:0 1px 2px #000;opacity:0';
+    document.body.appendChild(n);
+    dmgNums.push({ el: n, active: false, y: 0 });
+  }
+  return dmgNums;
+}
+
+export function spawnDamageNumber(dmgNums, x, y, z, text, color = '#ff4444') {
+  let d = null;
+  for (const item of dmgNums) {
+    if (!item.active) { d = item; break; }
+  }
+  if (!d) return;
+  d.active = true; d.y = y;
+  d.el.textContent = text;
+  d.el.style.color = color;
+  d.el.style.opacity = '1';
+  d.el.style.left = x + 'px';
+  d.el.style.bottom = y + 'px';
+  d.el.dataset.time = '0';
+}
+
+export function updateDamageNumbers(dmgNums, dt) {
+  dmgNums.forEach(d => {
+    if (!d.active) return;
+    d.y += dt * 80;
+    const elapsed = parseFloat(d.el.dataset.time) || 0;
+    d.el.style.bottom = (d.y + Math.sin(elapsed * 30) * 4) + 'px';
+    d.el.dataset.time = (elapsed + dt).toString();
+    const progress = elapsed / 1.2;
+    if (progress > 1) {
+      d.active = false; d.el.style.opacity = '0';
+    } else {
+      d.el.style.opacity = (1 - progress * 0.7).toString();
+      d.el.style.fontSize = (14 + (1 - progress) * 8) + 'px';
+    }
+  });
 }

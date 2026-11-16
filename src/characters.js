@@ -125,7 +125,8 @@ export function updateCharacters(captain, pip, tarn, shipX, shipZ, shipH, waveFu
   const td = Math.hypot(tarn.x - shipX, tarn.z - shipZ);
   if (td < 28 && !st.tarnSeen && st.run) {
     st.tarnSeen = true;
-    say('Old Tarn', 'Ahoy, sailor! Follow the golden beams to the chests!', 4200);
+    say('Old Tarn', 'Ahoy! I\'ve a task for ye: \'Bring me 3 chests\' - complete it and the gold be yours!', 4200);
+    if (typeof onQuestStart === 'function') onQuestStart();
   }
   if (td > 70) st.tarnSeen = false;
 }

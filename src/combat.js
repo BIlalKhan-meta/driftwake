@@ -80,7 +80,7 @@ export function tryFire(st, scene, balls, ballMat, lockCam, lockT, D, fireCd, up
   return { fireCd, waveT };
 }
 
-export function updateProjectiles(balls, booms, st, enemies, dt, t, waveFunc, boom, sfx, sfxHitEnemy, sfxHitPlayer, updHud, say, sunk, save, spawnSplinters, spawnFire, dev) {
+export function updateProjectiles(balls, booms, st, enemies, dt, t, waveFunc, boom, sfx, sfxHitEnemy, sfxHitPlayer, updHud, say, sunk, save, spawnSplinters, spawnFire, dev, spawnDmg) {
   balls.forEach(b => {
     if (!b.on) return;
     b.vy -= 14 * dt;
@@ -97,6 +97,15 @@ export function updateProjectiles(balls, booms, st, enemies, dt, t, waveFunc, bo
           const dir = new BABYLON.Vector3(e.x - p.x, 0, e.z - p.z); dir.normalize();
           spawnSplinters(p.x, p.y, p.z, dir);
           spawnFire(p.x, p.y + 1.2, p.z);
+          
+          if (spawnDmg) spawnDmg(p.x, p.y + 3, p.z, '1', '#ff4444');
+          
+          // Combo counter
+          if (e.hp === 0) {
+            st.combo++;
+          } else {
+            st.combo = 1;
+          }
           
           if (e.hp <= 0) {
             e.dead = 25; st.kills++; st.gold += e.boss ? 80 : 15; st.waveT = 1.6; sfx('boom');

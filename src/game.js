@@ -12,11 +12,12 @@ import { createEnemies, placeEnemy, updateEnemies } from './enemies.js';
 import { createProjectiles, shoot, boom, tryFire, updateProjectiles } from './combat.js';
 import { createSplashSystem, createVWakeSystem, createSplinterSystem, createFireSystem,
   updateSplashes, updateVWake, updateSplinters, updateFirePuffs,
-  spawnSplinters, spawnFire } from './effects.js';
+  spawnSplinters, spawnFire, createDamageNumbers, updateDamageNumbers, spawnDamageNumber } from './effects.js';
 import { createGameFeel } from './gamefeel.js';
 import { initAudio, resumeAudio, playSfx, sfxHitEnemy, sfxHitPlayer, toggleMute, isMuted, setMuted } from './audio.js';
 import { saveGame, loadGame, resetSave } from './save.js';
 import { createInput } from './input.js';
+import { createQuestSystem, getAvailableQuest, updateQuestProgress, checkQuestCompletion, QUEST_LIST } from './quests.js';
 
 const { SEA_SIZE, SEA_DIVISIONS, TOTAL_CHESTS, ISLAND_COUNT } = GAME_CONFIG;
 const CELL = SEA_SIZE / SEA_DIVISIONS;
@@ -54,7 +55,7 @@ export class DriftwakeGame {
       run: false, won: false, got: 0, time: 0,
       h: 0, sp: 0, lean: 0, x: 0, z: 0,
       fx: 0, fz: 1, spd: 1, splashT: 0,
-      hp: 5, hpMax: 5, gold: 0, kills: 0,
+      hp: 5, hpMax: 5, gold: 0, kills: 0, combo: 0,
       diffKey: 'storm', up: { cannon: 0, hull: 0, sail: 0 },
       bestTime: 0, waveT: 0, tarnSeen: false,
       dt: 0, shipY: 0,
@@ -71,6 +72,11 @@ export class DriftwakeGame {
     this.vwakeI = 0;
     this.splI = 0;
     this.fireI = 0;
+    
+    // Quest system
+    this.quests = createQuestSystem();
+    this.tarnEncountered = false;
+    this.tarnHasQuest = false;
     
     // Input
     this.input = createInput();
@@ -96,7 +102,10 @@ export class DriftwakeGame {
       },
       onPointerDown: () => { this.orb.idle = 0; },
       onEscape: () => {
-        if (this.paused) this.closePause();
+        const tarnModal = this.$('tarnModal');
+        if (tarnModal && tarnModal.style.display === 'flex') {
+          this.closeTarnModal();
+        } else if (this.paused) this.closePause();
         else if (this.st.run && !this.tradeOpen) this.openPause();
       },
     };
@@ -181,6 +190,9 @@ export class DriftwakeGame {
     this.booms = booms;
     this.ballMat = ballMat;
     this.boomMat = boomMat;
+    
+    // Damage numbers system
+    this.damageNumbers = createDamageNumbers();
   }
   
   makeRNG() {
@@ -213,8 +225,15 @@ export class DriftwakeGame {
   $(id) { return document.getElementById(id); }
   
   updHud() {
-    this.$('hpP').textContent = `Hull ${this.st.hp}/${this.st.hpMax}`;
     this.$('goldP').textContent = `Gold ${this.st.gold} · Sunk ${this.st.kills}`;
+    if (this.st.combo > 2) {
+      this.$('combo').textContent = `×${this.st.combo}`;
+      this.$('combo').style.display = 'block';
+      this.$('combo').classList.add('on');
+    } else {
+      this.$('combo').style.display = 'none';
+      this.$('combo').classList.remove('on');
+    }
   }
   
   syncMute() {
@@ -237,6 +256,195 @@ export class DriftwakeGame {
   
   fmt(s) { s = Math.floor(s); return Math.floor(s/60) + ':' + String(s%60).padStart(2,'0'); }
   
+  // ===== Quest System =====
+  startQuest() {
+    const quest = getAvailableQuest.call(this.quests, this.st.diffKey);
+    if (quest) {
+      this.quests.activeQuest = { ...quest };
+      this.quests.questProgress[quest.id] = 0;
+      this.say('Old Tarn', `Ahoy! I've a task for ye: ${quest.description} - complete it and the gold be yours!`, 4000);
+      this.updQuestHUD();
+    }
+  }
+  
+  completeQuest() {
+    const result = checkQuestCompletion(this.quests);
+    if (result.type === 'completed') {
+      const reward = result.quest.reward;
+      this.st.gold += reward;
+      this.say('Old Tarn', `Well done! Heres ${reward} gold for completing the quest!`, 3000);
+      this.quests.activeQuest = null;
+      this.updQuestHUD();
+      return reward;
+    }
+    return 0;
+  }
+  
+  updQuestHUD() {
+    const questEl = this.$('quest');
+    const questHUD = this.$('questHUD');
+    if (!questEl || !questHUD) return;
+    
+    if (this.quests.activeQuest) {
+      const result = checkQuestCompletion(this.quests);
+      questEl.style.display = 'block';
+      questEl.textContent = `${this.quests.activeQuest.icon} ${this.quests.activeQuest.description} (${result.progress}/${result.target})`;
+      
+      questHUD.style.display = 'block';
+      questHUD.innerHTML = `${this.quests.activeQuest.icon} <span style="color:var(--gold)">${this.quests.activeQuest.description}</span> <span style="color:var(--coral)">${result.progress}/${result.target}</span>`;
+    } else {
+      questEl.style.display = 'none';
+      questHUD.style.display = 'none';
+    }
+  }
+  
+  checkTarnEncounter() {
+    // Check if player is near Tarn with treasure - only shows Trade button, no auto-modal
+    const nearTarn = Math.hypot(this.tarnX - this.st.x, this.tarnZ - this.st.z) < 38;
+    const hasTreasure = this.st.got > 0;
+    
+    // Trade button appears when near
+    if (nearTarn && hasTreasure) {
+      this.tarnHasQuest = this.quests.activeQuest !== null;
+    }
+  }
+  
+
+  showTarnModal() {
+    const modal = this.$('tarnModal');
+    modal.style.display = 'flex';
+    this.paused = true;
+    
+    // Reset to quests tab
+    this.switchTarnTab('quests');
+    this.renderQuestList();
+    this.renderTarnUpgrades();
+  }
+  
+  closeTarnModal() {
+    const modal = this.$('tarnModal');
+    modal.style.display = 'none';
+    this.paused = false;
+  }
+  
+  switchTarnTab(tab) {
+    document.querySelectorAll('.tarn-tab').forEach(btn => {
+      const isActive = btn.dataset.tab === tab;
+      btn.classList.toggle('active', isActive);
+      btn.style.background = isActive ? 'var(--gold)' : 'var(--panel)';
+      btn.style.color = isActive ? 'var(--ink)' : 'var(--text)';
+      btn.style.border = isActive ? '0' : '2px solid var(--gold)';
+    });
+    document.querySelectorAll('.tarn-panel').forEach(panel => {
+      panel.style.display = panel.id === 'tarn-' + tab + '-panel' ? 'block' : 'none';
+    });
+    if (tab === 'quests') this.renderQuestList();
+    else this.renderTarnUpgrades();
+  }
+  
+  renderQuestList() {
+    const container = this.$('tarn-quest-list');
+    const quests = this.getAvailableQuests();
+    
+    if (!quests.length) {
+      container.innerHTML = '<p style="text-align:center;color:var(--text);opacity:.7;padding:20px">No quests available for this sea.</p>';
+      return;
+    }
+    
+    const activeQuest = this.quests.activeQuest;
+    const completed = this.quests.completedQuests || [];
+    
+    container.innerHTML = quests.map(q => {
+      const isActive = activeQuest?.id === q.id;
+      const isCompleted = completed.includes(q.id);
+      const progress = this.quests.questProgress[q.id] || 0;
+      
+      let statusHtml = '';
+      if (isActive) {
+        statusHtml = '<div class="quest-progress"><div style="background:var(--gold);height:6px;border-radius:3px;width:' + Math.min(100, progress/q.target*100) + '%"></div><span>' + progress + '/' + q.target + '</span></div>';
+      } else if (isCompleted) {
+        statusHtml = '<span style="color:#6fdc8c;font-weight:700">✓ Completed</span>';
+      } else {
+        statusHtml = '<span style="opacity:.6">Available</span>';
+      }
+      
+      return '\n        <div class="quest-item" style="background:var(--panel);border:2px solid ' + (isActive ? 'var(--gold)' : isCompleted ? '#6fdc8c' : 'transparent') + ';border-radius:10px;padding:12px;margin-bottom:8px;' + (isActive ? 'box-shadow:0 0 10px rgba(255,200,87,.3)' : '') + '">\n          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">\n            <span style="font-size:20px">' + q.icon + '</span>\n            ' + statusHtml + '\n          </div>\n          <div style="font:700 15px Fredoka,system-ui,sans-serif;color:var(--text);margin-bottom:4px">' + q.description + '</div>\n          <div style="font:500 12px Fredoka,system-ui,sans-serif;color:var(--gold)">Reward: ' + q.reward + ' gold</div>\n          ' + (isActive ? '\n            <button type="button" class="quest-action" data-quest-id="' + q.id + '" style="margin-top:8px;width:100%;font:700 14px Fredoka,system-ui,sans-serif;background:var(--panel);color:var(--text);border:2px solid var(--gold);border-radius:999px;padding:8px;cursor:pointer">\n              ' + (isCompleted ? 'Claim Reward' : 'In Progress') + '\n            </button>\n          ' : isCompleted ? '' : '\n            <button type="button" class="quest-action" data-quest-id="' + q.id + '" style="margin-top:8px;width:100%;font:700 14px Fredoka,system-ui,sans-serif;background:var(--gold);color:var(--ink);border:0;border-radius:999px;padding:8px;cursor:pointer">\n              Start Quest\n            </button>\n          ') + '\n        </div>\n      ';
+    }).join('');
+    
+    // Bind quest action buttons
+    container.querySelectorAll('.quest-action').forEach(btn => {
+      btn.onclick = () => this.handleQuestAction(btn.dataset.questId);
+    });
+  }
+  
+  getAvailableQuests() {
+    const allQuests = QUEST_LIST.filter(q => q.difficulty === this.st.diffKey);
+    return allQuests;
+  }
+  
+  handleQuestAction(questId) {
+    const quest = QUEST_LIST.find(q => q.id === questId);
+    if (!quest) return;
+    
+    const activeQuest = this.quests.activeQuest;
+    const isActive = activeQuest?.id === questId;
+    const completed = this.quests.completedQuests || [];
+    const isCompleted = completed.includes(questId);
+    
+    if (isActive && isCompleted) {
+      // Claim reward
+      const reward = quest.reward;
+      this.st.gold += reward;
+      this.showQuestCompleteModal(quest, reward);
+      this.quests.activeQuest = null;
+      this.updQuestHUD();
+      this.renderQuestList();
+      this.updHud();
+    } else if (!isActive && !isCompleted) {
+      // Start new quest
+      this.quests.activeQuest = { ...quest };
+      this.quests.questProgress[questId] = 0;
+      this.say('Old Tarn', "Ahoy! I've a task for ye: " + quest.description + " - complete it and the gold be yours!", 4000);
+      this.updQuestHUD();
+      this.renderQuestList();
+    }
+  }
+  
+  showQuestCompleteModal(quest, reward) {
+    const modal = this.$('questCompleteModal');
+    const textEl = this.$('questCompleteText');
+    const rewardEl = this.$('questCompleteReward');
+    if (!modal || !textEl || !rewardEl) return;
+    
+    textEl.textContent = 'You completed: ' + quest.description;
+    rewardEl.textContent = 'Reward: ' + reward + ' Gold';
+    
+    modal.style.display = 'flex';
+    this.paused = true;
+    
+    const closeBtn = this.$('questCompleteClose');
+    if (closeBtn) {
+      closeBtn.onclick = () => {
+        modal.style.display = 'none';
+        this.paused = false;
+        this.st.gold += reward;
+        this.updHud();
+        this.say('Old Tarn', 'Well done! Heres ' + reward + ' gold for completing the quest!', 3000);
+      };
+    }
+  }
+  
+  renderTarnUpgrades() {
+    this.$('tarnShopGold').textContent = 'Gold: ' + this.st.gold;
+    ['cannon', 'hull', 'sail'].forEach(k => {
+      const b = this.$('tarn_b_' + k);
+      const cost = (30 + (k === 'hull' ? 10 : k === 'sail' ? 5 : 0)) * (this.st.up[k] + 1);
+      b.textContent = b.dataset.n + ' · Lv ' + this.st.up[k] + ' · ' + cost + ' gold';
+      b.disabled = this.st.gold < cost || this.st.up[k] >= 4;
+    });
+  }
+
+  
   // ===== Game Flow =====
   newRun() {
     window.__rerr = 0;
@@ -248,6 +456,7 @@ export class DriftwakeGame {
     this.st.got = 0; this.st.time = 0; this.st.won = false; this.st.run = true;
     this.st.x = 0; this.st.z = 0; this.st.h = 0; this.st.sp = 0; this.st.lean = 0;
     this.st.tarnSeen = false; this.st.waveT = 0; this.st.splashT = 0;
+    this.st.combo = 0;
     this.chests = spawnChests(this.scene, this.makeRNG(), this.islands, this.chests);
     this.resetCombat();
     this.$('score').textContent = `Treasure 0/${TOTAL_CHESTS}`;
@@ -375,7 +584,12 @@ export class DriftwakeGame {
     this.st.fz = Math.cos(this.st.h);
 
     // Characters
-    updateCharacters(this.captain, this.pip, this.tarn, this.st.x, this.st.z, this.st.h, wave, t, this.st, (who, text, ms) => this.say(who, text, ms));
+    updateCharacters(this.captain, this.pip, this.tarn, this.st.x, this.st.z, this.st.h, wave, t, this.st, (who, text, ms) => this.say(who, text, ms), () => {
+      if (!this.quests.activeQuest) this.startQuest();
+    });
+    
+    // Tarn encounter check
+    this.checkTarnEncounter();
     
     // Treasure
     const chest = updateChests(this.chests, this.st, wave, t, dt,
@@ -384,7 +598,17 @@ export class DriftwakeGame {
       () => this.updHud(),
       () => saveGame(this.st),
       () => this.win(),
-      (got) => { this.$('score').textContent = `Treasure ${got}/${TOTAL_CHESTS}`; }
+      (got) => { this.$('score').textContent = `Treasure ${got}/${TOTAL_CHESTS}`; },
+      (type, amount) => {
+        const result = updateQuestProgress(this.quests, type, amount);
+        if (result === 'completed') {
+          const reward = this.quests.activeQuest.reward;
+          this.showQuestCompleteModal(this.quests.activeQuest, reward);
+          this.quests.activeQuest = null;
+          this.updQuestHUD();
+        }
+        this.updQuestHUD();
+      }
     );
     
     if (chest.near && this.st.run) {
@@ -574,7 +798,8 @@ export class DriftwakeGame {
         () => saveGame(this.st),
         (x, y, z, dir) => spawnSplinters(this.splinters, x, y, z, dir),
         (x, y, z) => spawnFire(this.firePuffs, x, y, z),
-        this.dev
+        this.dev,
+        (x, y, z, text, color) => spawnDamageNumber(this.damageNumbers, x, y, z, text, color)
       );
     }
     
@@ -583,6 +808,8 @@ export class DriftwakeGame {
     this.$('trade').style.display = near && this.st.run && !this.tradeOpen ? 'block' : 'none';
     
     // HUD 3D
+    // Damage numbers
+    if (this.damageNumbers) updateDamageNumbers(this.damageNumbers, dt);
     this.hud3d();
   }
   

@@ -1,7 +1,7 @@
 // Driftwake - Ship Entity & Controller
 
 
-import { createMaterial, flat, enableShadows } from './engine.js';
+import { createMaterial, createPBRMaterial, flat, enableShadows } from './engine.js';
 import { COLORS } from './config.js';
 
 export function createShip(scene, shadowGenerator = null) {
@@ -10,12 +10,37 @@ export function createShip(scene, shadowGenerator = null) {
   body.parent = ship;
   
   const { wood, deck, cloth, red, gold } = COLORS.ship;
-  const woodMat = createMaterial(scene, wood);
-  const deckMat = createMaterial(scene, deck);
-  const clothMat = createMaterial(scene, cloth);
-  const redMat = createMaterial(scene, red);
-  const goldMat = createMaterial(scene, gold, '#6b4b00');
-  const ironMat = createMaterial(scene, '#2a2a2e');
+  const woodMat = createPBRMaterial(scene, wood, {
+    metallic: 0.05,
+    roughness: 0.85,
+    envIntensity: 1.0,
+  });
+  const deckMat = createPBRMaterial(scene, deck, {
+    metallic: 0.02,
+    roughness: 0.9,
+    envIntensity: 1.0,
+  });
+  const clothMat = createPBRMaterial(scene, cloth, {
+    metallic: 0.0,
+    roughness: 0.95,
+    envIntensity: 0.8,
+  });
+  const redMat = createPBRMaterial(scene, red, {
+    metallic: 0.0,
+    roughness: 0.7,
+    envIntensity: 0.8,
+  });
+  const goldMat = createPBRMaterial(scene, gold, {
+    metallic: 0.9,
+    roughness: 0.3,
+    envIntensity: 1.2,
+    emissiveHex: '#6b4b00',
+  });
+  const ironMat = createPBRMaterial(scene, '#2a2a2e', {
+    metallic: 0.95,
+    roughness: 0.4,
+    envIntensity: 1.0,
+  });
   
   // Hull
   const hull = flat(BABYLON.MeshBuilder.CreateBox('hull', { width: 2.2, height: 0.9, depth: 4.4 }, scene));

@@ -1,6 +1,10 @@
 // Driftwake - Shader Registration
 
 export function registerSeaShaders() {
+  if (!BABYLON || !BABYLON.Effect) {
+    console.warn('BABYLON.Effect not available, skipping sea shader registration');
+    return;
+  }
   BABYLON.Effect.ShadersStore['seaVertexShader'] = `
     precision highp float;
     attribute vec3 position;

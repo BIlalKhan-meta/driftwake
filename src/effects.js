@@ -10,6 +10,7 @@ const { particles } = COLORS;
 let splI = 0;
 let fireI = 0;
 let dmgI = 0;
+let smokeI = 0;
 
 export function createSplashSystem(scene) {
   const splashMat = createMaterial(scene, particles.splash, particles.splash);
@@ -211,4 +212,81 @@ export function updateDamageNumbers(dmgNums, dt) {
       d.el.style.fontSize = (14 + (1 - progress) * 8) + 'px';
     }
   });
+}
+
+// Cannon Smoke Particle System
+export function createSmokeSystem(scene) {
+  const smokeMat = createMaterial(scene, '#888888', '#aaaaaa');
+  smokeMat.disableLighting = true; smokeMat.alpha = 0.6; smokeMat.backFaceCulling = false;
+  
+  const smokes = [];
+  for (let k = 0; k < 30; k++) {
+    const s = BABYLON.MeshBuilder.CreateSphere('smoke', { diameter: 1.2, segments: 8 }, scene);
+    s.material = smokeMat; s.scaling.set(0, 0, 0); s.visibility = 0; s.life = 0; s.v = new BABYLON.Vector3();
+    smokes.push(s);
+  }
+  return { smokes, smokeMat };
+}
+
+export function updateSmoke(smokes, dt) {
+  smokes.forEach(s => {
+    if (s.life > 0) {
+      s.life -= dt * 2;
+      if (s.life <= 0) { s.visibility = 0; s.scaling.set(0, 0, 0); return; }
+      s.position.addInPlace(s.v.scale(dt));
+      s.v.y += dt * 2; // float upward
+      s.v.scaleInPlace(0.95); // slow down
+      const p = 1 - s.life; s.scaling.set(0.4 + p, 0.4 + p, 0.4 + p); s.visibility = Math.max(0, s.life * 0.6);
+    }
+  });
+}
+
+export function spawnSmoke(smokes, x, y, z) {
+  for (let n = 0; n < 3; n++) {
+    const idx = smokeI++ % smokes.length;
+    const s = smokes[idx];
+    if (s && s.life <= 0) {
+      s.life = 1; s.position.set(x + (Math.random() - 0.5) * 0.5, y, z + (Math.random() - 0.5) * 0.5);
+      s.v.set((Math.random() - 0.5) * 1, 1 + Math.random() * 1, (Math.random() - 0.5) * 1);
+      s.scaling.set(0.4, 0.4, 0.4); s.visibility = 0.6;
+    }
+  }
+}
+
+// Treasure Sparkle Particle System
+export function createSparkleSystem(scene) {
+  const sparkleMat = createMaterial(scene, '#ffc857', '#ffc857');
+  sparkleMat.disableLighting = true; sparkleMat.alpha = 0.9; sparkleMat.backFaceCulling = false;
+  
+  const sparkles = [];
+  for (let k = 0; k < 20; k++) {
+    const s = BABYLON.MeshBuilder.CreateDisc('sparkle', { radius: 0.3, tessellation: 8 }, scene);
+    s.material = sparkleMat; s.rotation.x = Math.PI / 2; s.scaling.set(0, 0, 0); s.visibility = 0; s.life = 0; s.v = new BABYLON.Vector3();
+    sparkles.push(s);
+  }
+  return { sparkles, sparkleMat };
+}
+
+export function updateSparkles(sparkles, dt) {
+  sparkles.forEach(s => {
+    if (s.life > 0) {
+      s.life -= dt * 3;
+      if (s.life <= 0) { s.visibility = 0; s.scaling.set(0, 0, 0); return; }
+      s.position.addInPlace(s.v.scale(dt));
+      s.v.y += dt * 1.5; // float up
+      s.rotation.z += dt * 4; // spin
+      const p = 1 - s.life; s.scaling.set(0.3 * (1 - p), 0.3 * (1 - p), 0.3 * (1 - p)); s.visibility = Math.max(0, s.life);
+    }
+  });
+}
+
+export function spawnSparkles(sparkles, x, y, z) {
+  for (let n = 0; n < 6; n++) {
+    const s = sparkles[n % sparkles.length];
+    if (s.life <= 0) {
+      s.life = 1; s.position.set(x + (Math.random() - 0.5) * 1, y + 1, z + (Math.random() - 0.5) * 1);
+      s.v.set((Math.random() - 0.5) * 0.5, 0.5 + Math.random() * 0.5, (Math.random() - 0.5) * 0.5);
+      s.scaling.set(0.3, 0.3, 0.3); s.visibility = 0.9;
+    }
+  }
 }

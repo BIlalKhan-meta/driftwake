@@ -6,19 +6,16 @@ import { GAME_CONFIG, COLORS, CAPTAIN_LINES } from './config.js';
 import { wave } from './water.js';
 
 const { SEA_SIZE, ISLAND_COUNT, TOTAL_CHESTS } = GAME_CONFIG;
-const { water: wCol, particles } = COLORS;
+const { water: wCol } = COLORS;
 
 export function createIslands(scene, rnd) {
-  const sand = createMaterial(scene, wCol.shallow); // #f2d9a0 equivalent
-  const grass = createMaterial(scene, '#4f9d5d');
-  const trunk = createMaterial(scene, '#8a5a35');
-  const leaf = createMaterial(scene, '#2f7d4f');
+  // Materials with lighting enabled (natural day/night response)
+  const sandMat = createMaterial(scene, '#f2d9a0'); // Sand color
+  const grassMat = createMaterial(scene, '#4f9d5d'); // Green grass
+  const trunkMat = createMaterial(scene, '#8a5a35'); // Tree trunks
+  const leafMat = createMaterial(scene, '#2f7d4f'); // Tree leaves
   
   const islands = [];
-  const foamMat = createMaterial(scene, particles.foam, particles.foam);
-  foamMat.disableLighting = true;
-  foamMat.alpha = 0.55;
-  foamMat.backFaceCulling = false;
   
   for (let n = 0; islands.length < ISLAND_COUNT && n < 400; n++) {
     const x = (rnd() - 0.5) * 320;
@@ -30,13 +27,13 @@ export function createIslands(scene, rnd) {
     
     islands.push({ x, z, r });
     
-    // Sand base
-    const s = flat(BABYLON.MeshBuilder.CreateSphere('i', { diameter: r * 2, segments: 7 }, scene));
-    s.material = sand; s.scaling.y = 0.3; s.position.set(x, -0.2, z);
+    // Island base - sand sitting in water
+    const s = flat(BABYLON.MeshBuilder.CreateSphere('i', { diameter: r * 2, segments: 8 }, scene));
+    s.material = sandMat; s.scaling.y = 0.3; s.position.set(x, -0.2, z);
     
-    // Grass top
-    const g = flat(BABYLON.MeshBuilder.CreateSphere('g', { diameter: r * 1.3, segments: 6 }, scene));
-    g.material = grass; g.scaling.y = 0.3; g.position.set(x, r * 0.12, z);
+    // Grass top - green
+    const g = flat(BABYLON.MeshBuilder.CreateSphere('g', { diameter: r * 1.4, segments: 7 }, scene));
+    g.material = grassMat; g.scaling.y = 0.35; g.position.set(x, r * 0.15, z);
     
     // Trees
     const trees = 2 + Math.floor(rnd() * 3);
@@ -48,30 +45,27 @@ export function createIslands(scene, rnd) {
       const th = 3 + rnd() * 2;
       
       const tr = BABYLON.MeshBuilder.CreateCylinder('t', { diameterTop: 0.3, diameterBottom: 0.5, height: th, tessellation: 6 }, scene);
-      tr.material = trunk; tr.position.set(tx, r * 0.3 + th / 2 - 0.4, tz);
+      tr.material = trunkMat; tr.position.set(tx, r * 0.35 + th / 2 - 0.4, tz);
       
-      const lf = flat(BABYLON.MeshBuilder.CreateSphere('l', { diameter: 3.2, segments: 5 }, scene));
-      lf.material = leaf; lf.scaling.y = 0.4; lf.position.set(tx, r * 0.3 + th - 0.2, tz);
+      const lf = flat(BABYLON.MeshBuilder.CreateSphere('l', { diameter: 3.4, segments: 6 }, scene));
+      lf.material = leafMat; lf.scaling.y = 0.45; lf.position.set(tx, r * 0.4 + th - 0.3, tz);
     }
     
-    // Foam ring
-    const f = BABYLON.MeshBuilder.CreateTorus('f', { diameter: r * 2.05, thickness: 0.7, tessellation: 28 }, scene);
-    f.material = foamMat; f.scaling.y = 0.15; f.position.set(x, 0.3, z);
-    islands[islands.length - 1].foam = f;
+    // Subtle shallow water around island base - prevents floating look without Saturn rings
+    const shallowWater = BABYLON.MeshBuilder.CreateDisc('sw', { radius: r * 1.35, tessellation: 16 }, scene);
+    shallowWater.material = createMaterial(scene, '#012240', '#012240');
+    shallowWater.material.disableLighting = true;
+    shallowWater.material.alpha = 0.4;
+    shallowWater.rotation.x = Math.PI / 2;
+    shallowWater.position.set(x, -0.1, z);
+    shallowWater.isPickable = false;
   }
   
   return islands;
 }
 
 export function updateIslandFoam(islands, t, waveFunc) {
-  islands.forEach((i, n) => {
-    const hh = waveFunc(i.x, i.z, t);
-    const rel = (hh + 0.2) / (0.3 * i.r);
-    const f = Math.sqrt(Math.max(0.05, 1 - rel * rel)) * (1 + Math.sin(t * 1.5 + n) * 0.02);
-    i.foam.position.y = hh + 0.25;
-    i.foam.scaling.x = f;
-    i.foam.scaling.z = f;
-  });
+  // No foam rings - islands sit directly in water
 }
 
 export function spawnChests(scene, rnd, islands, existingChests = []) {
@@ -79,9 +73,10 @@ export function spawnChests(scene, rnd, islands, existingChests = []) {
   existingChests.forEach(c => c.node.dispose());
   
   const chestMat = createMaterial(scene, '#b5651d');
+  chestMat.disableLighting = true;
   const beamMat = createMaterial(scene, '#ffc857', '#ffc857');
   beamMat.disableLighting = true;
-  beamMat.alpha = 0.35;
+  beamMat.alpha = 0.2; // Reduced shine
   beamMat.fogEnabled = false;
   
   const chests = [];
@@ -100,8 +95,8 @@ export function spawnChests(scene, rnd, islands, existingChests = []) {
     const lid = flat(BABYLON.MeshBuilder.CreateBox('lid', { width: 1.15, height: 0.25, depth: 0.75 }, scene));
     lid.material = beamMat; lid.position.set(0, 0.42, 0); lid.parent = node;
     
-    const beam = flat(BABYLON.MeshBuilder.CreateCylinder('beam', { diameter: 0.6, height: 16, tessellation: 8 }, scene));
-    beam.material = beamMat; beam.position.set(0, 8, 0); beam.isPickable = false; beam.parent = node;
+    const beam = flat(BABYLON.MeshBuilder.CreateCylinder('beam', { diameter: 0.5, height: 14, tessellation: 8 }, scene));
+    beam.material = beamMat; beam.position.set(0, 7, 0); beam.isPickable = false; beam.parent = node;
     
     chests.push({ x, z, node, ph: rnd() * 6 });
   }
@@ -109,7 +104,7 @@ export function spawnChests(scene, rnd, islands, existingChests = []) {
   return chests;
 }
 
-export function updateChests(chests, st, waveFunc, t, dt, say, sfx, updHud, save, onWin, onScore, onQuestProgress) {
+export function updateChests(chests, st, waveFunc, t, dt, say, sfx, updHud, save, onWin, onScore, onQuestProgress, spawnSparkles) {
   let near = null, nd = 1e9;
   if (!chests || !chests.length) return { near, nd };
 
@@ -133,6 +128,7 @@ export function updateChests(chests, st, waveFunc, t, dt, say, sfx, updHud, save
       say('Captain Mara', CAPTAIN_LINES[st.got % CAPTAIN_LINES.length], 2600);
       
       // Quest progress for treasure
+      if (spawnSparkles) spawnSparkles(c.x, waveFunc(c.x, c.z, t) + 0.5, c.z);
       if (onQuestProgress) onQuestProgress('treasure', 1);
       
       if (st.got >= TOTAL_CHESTS) onWin();

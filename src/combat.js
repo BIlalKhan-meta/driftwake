@@ -47,7 +47,7 @@ export function boom(booms, scene, boomMat, x, y, z) {
   b.l = 1; b.m.position.set(x, y, z); b.m.setEnabled(true);
 }
 
-export function tryFire(st, scene, balls, ballMat, lockCam, lockT, D, fireCd, up, sfx, waveT) {
+export function tryFire(st, scene, balls, ballMat, lockCam, lockT, D, fireCd, up, sfx, waveT, spawnSmoke) {
   if (fireCd > 0 || !st.run) return { fireCd, waveT };
   
   const tg = lockCam && lockT && !lockT.dead ? lockT : null;
@@ -75,6 +75,10 @@ export function tryFire(st, scene, balls, ballMat, lockCam, lockT, D, fireCd, up
   }
   
   sfx('cannon');
+  
+  // Cannon smoke
+  if (spawnSmoke) spawnSmoke(st.x, st.shipY + 1.35, st.z);
+  
   fireCd = 1.35 * Math.pow(0.8, up.cannon);
   waveT = 0.55;
   return { fireCd, waveT };

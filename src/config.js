@@ -68,7 +68,7 @@ export const DIFFICULTY = {
 };
 
 export const UPGRADE_COSTS = { cannon: 30, hull: 40, sail: 35 };
-export const UPGRADE_MAX_LEVEL = 4;
+export const UPGRADE_MAX_LEVEL = 8;
 
 export const STORAGE_KEY = 'driftwake_v1';
 

@@ -12,7 +12,9 @@ import { createEnemies, placeEnemy, updateEnemies } from './enemies.js';
 import { createProjectiles, shoot, boom, tryFire, updateProjectiles } from './combat.js';
 import { createSplashSystem, createVWakeSystem, createSplinterSystem, createFireSystem,
   updateSplashes, updateVWake, updateSplinters, updateFirePuffs,
-  spawnSplinters, spawnFire, createDamageNumbers, updateDamageNumbers, spawnDamageNumber } from './effects.js';
+  spawnSplinters, spawnFire, createDamageNumbers, updateDamageNumbers, spawnDamageNumber,
+  createSmokeSystem, updateSmoke, spawnSmoke,
+  createSparkleSystem, updateSparkles, spawnSparkles } from './effects.js';
 import { createGameFeel } from './gamefeel.js';
 import { initAudio, resumeAudio, playSfx, sfxHitEnemy, sfxHitPlayer, toggleMute, isMuted, setMuted } from './audio.js';
 import { saveGame, loadGame, resetSave } from './save.js';
@@ -46,6 +48,72 @@ export class DriftwakeGame {
     this.sun = sun;
     this.lamp = lamp;
     this.skyColor = skyColor;
+    
+    // Post-Processing Pipeline
+    this.postProcessPipeline = new BABYLON.DefaultRenderingPipeline(
+      'postProcess',
+      true,
+      this.scene,
+      [camera],
+      1.0
+    );
+    
+    // Configure Bloom
+    this.postProcessPipeline.bloomEnabled = true;
+    this.postProcessPipeline.bloomThreshold = 0.8;
+    this.postProcessPipeline.bloomWeight = 0.4;
+    this.postProcessPipeline.bloomKernel = 64;
+    
+    // Configure Color Grading (enhances day/night cycle)
+    this.postProcessPipeline.colorGradingEnabled = true;
+    this.postProcessPipeline.colorGradingTexture = null;
+    
+    // Enable FXAA for smoother edges
+    this.postProcessPipeline.fxaaEnabled = true;
+    
+    // Glow Layer for treasure chests, locked enemies, UI highlights
+    this.glowLayer = new BABYLON.GlowLayer('glow', this.scene, {
+      mainTextureRatio: 2,
+      blurWidth: 1.5, // Reduced from 2 to decrease glow intensity
+    });
+    this.dayK = 1; // Track day/night for glow reduction (1=day, 0=night)
+    
+    // Babylon.js GUI - AdvancedDynamicTexture for HUD (with fallback)
+    this.guiTexture = null;
+    this.hudScore = null;
+    this.hudTime = null;
+    this.hudHP = null;
+    this.hudGold = null;
+    this.hudCombo = null;
+    this.hudQuest = null;
+    
+    try {
+      if (BABYLON.GUI && BABYLON.GUI.AdvancedDynamicTexture) {
+        this.guiTexture = BABYLON.GUI.AdvancedDynamicTexture.CreateFullscreenUI('HUD');
+        
+        const createHudText = (name, text, fontSize, color, top, left) => {
+          const tb = new BABYLON.GUI.TextBlock(name, text);
+          tb.fontSize = fontSize;
+          tb.color = color;
+          tb.fontFamily = 'Fredoka';
+          tb.top = top;
+          tb.left = left;
+          tb.horizontalAlignment = BABYLON.GUI.Control.HORIZONTAL_ALIGNMENT_LEFT;
+          tb.verticalAlignment = BABYLON.GUI.Control.VERTICAL_ALIGNMENT_TOP;
+          this.guiTexture.addControl(tb);
+          return tb;
+        };
+        
+        this.hudScore = createHudText('hudScore', 'Treasure 0/8', 'clamp(16px, 2vw, 24px)', '#ffc857', '10px', '12px');
+        this.hudTime = createHudText('hudTime', '0:00', 'clamp(16px, 2vw, 24px)', '#f7ebc6', '10px', '50%');
+        this.hudHP = createHudText('hudHP', 'Hull 5/5', 'clamp(14px, 1.8vw, 20px)', '#6fdc8c', '56px', '12px');
+        this.hudGold = createHudText('hudGold', 'Gold 0', 'clamp(14px, 1.8vw, 20px)', '#ffc857', '100px', '12px');
+        this.hudCombo = createHudText('hudCombo', '', 'clamp(18px, 2.5vw, 32px)', '#e4572e', '180px', '12px');
+        this.hudQuest = createHudText('hudQuest', '', 'clamp(12px, 1.5vw, 18px)', '#f7ebc6', '220px', '12px');
+      }
+    } catch (e) {
+      console.warn('Babylon.js GUI not available, using HTML fallback:', e.message);
+    }
     
     // Dev/cheat state
     this.dev = { god: false, d: -1, fast: false };
@@ -193,6 +261,14 @@ export class DriftwakeGame {
     
     // Damage numbers system
     this.damageNumbers = createDamageNumbers();
+    
+    // Cannon smoke system
+    const { smokes: smokeSystem } = createSmokeSystem(this.scene);
+    this.smokeSystem = smokeSystem;
+    
+    // Treasure sparkle system
+    const { sparkles: sparkleSystem } = createSparkleSystem(this.scene);
+    this.sparkleSystem = sparkleSystem;
   }
   
   makeRNG() {
@@ -225,7 +301,24 @@ export class DriftwakeGame {
   $(id) { return document.getElementById(id); }
   
   updHud() {
+    // Update HTML HUD pills (screen-fixed)
+    this.$('hpP').textContent = `Hull ${this.st.hp}/${this.st.hpMax}`;
     this.$('goldP').textContent = `Gold ${this.st.gold} · Sunk ${this.st.kills}`;
+    this.$('score').textContent = `Treasure ${this.st.got}/${TOTAL_CHESTS}`;
+    
+    // Update Babylon.js GUI HUD elements (supplementary)
+    if (this.hudGold) this.hudGold.text = `Gold ${this.st.gold} · Sunk ${this.st.kills}`;
+    if (this.hudHP) this.hudHP.text = `Hull ${this.st.hp}/${this.st.hpMax}`;
+    if (this.hudScore) this.hudScore.text = `Treasure ${this.st.got}/${TOTAL_CHESTS}`;
+    
+    if (this.st.combo > 2 && this.hudCombo) {
+      this.hudCombo.text = `×${this.st.combo}`;
+      this.hudCombo.isVisible = true;
+    } else if (this.hudCombo) {
+      this.hudCombo.isVisible = false;
+    }
+
+    // Update floating combo pill
     if (this.st.combo > 2) {
       this.$('combo').textContent = `×${this.st.combo}`;
       this.$('combo').style.display = 'block';
@@ -340,6 +433,10 @@ export class DriftwakeGame {
     });
     if (tab === 'quests') this.renderQuestList();
     else this.renderTarnUpgrades();
+    
+    // Clear success message
+    const successEl = this.$('tarnUpgradeSuccess');
+    if (successEl) successEl.style.opacity = '0';
   }
   
   renderQuestList() {
@@ -436,11 +533,17 @@ export class DriftwakeGame {
   
   renderTarnUpgrades() {
     this.$('tarnShopGold').textContent = 'Gold: ' + this.st.gold;
+    const maxLevel = 8;
     ['cannon', 'hull', 'sail'].forEach(k => {
       const b = this.$('tarn_b_' + k);
       const cost = (30 + (k === 'hull' ? 10 : k === 'sail' ? 5 : 0)) * (this.st.up[k] + 1);
-      b.textContent = b.dataset.n + ' · Lv ' + this.st.up[k] + ' · ' + cost + ' gold';
-      b.disabled = this.st.gold < cost || this.st.up[k] >= 4;
+      if (this.st.up[k] >= maxLevel) {
+        b.textContent = b.dataset.n + ' · MAX';
+        b.disabled = true;
+      } else {
+        b.textContent = b.dataset.n + ' · Lv ' + this.st.up[k] + ' · ' + cost + ' gold';
+        b.disabled = this.st.gold < cost;
+      }
     });
   }
 
@@ -458,8 +561,18 @@ export class DriftwakeGame {
     this.st.tarnSeen = false; this.st.waveT = 0; this.st.splashT = 0;
     this.st.combo = 0;
     this.chests = spawnChests(this.scene, this.makeRNG(), this.islands, this.chests);
+    
+    // Add chests to glow layer
+    if (this.glowLayer) {
+      this.chests.forEach(c => {
+        if (c.node && c.node.getChildMeshes) {
+          c.node.getChildMeshes().forEach(m => this.glowLayer.addIncludedOnlyMesh(m));
+        }
+      });
+    }
+    
     this.resetCombat();
-    this.$('score').textContent = `Treasure 0/${TOTAL_CHESTS}`;
+    if (this.hudScore) this.hudScore.text = `Treasure 0/${TOTAL_CHESTS}`;
     this.$('ov').style.display = 'none';
     this.canvas.focus();
     this.say('Captain Mara', `All hands — ${this.D.name}! Eight chests are out there.`, 3500);
@@ -547,11 +660,52 @@ export class DriftwakeGame {
   buyUpgrade(k) {
     const cost = (30 + (k === 'hull' ? 10 : k === 'sail' ? 5 : 0)) * (this.st.up[k] + 1);
     if (this.st.gold < cost) return;
+
+    // Instant feedback: disable button + loading state
+    const btn = this.$('tarn_b_' + k);
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = 'Upgrading...';
+      btn.style.opacity = '0.7';
+    }
+
     this.st.gold -= cost; this.st.up[k]++;
     if (k === 'hull') { this.st.hpMax += 2; this.st.hp = this.st.hpMax; }
     if (k === 'sail') this.st.spd = 1 + 0.12 * this.st.up.sail;
-    this.updHud(); this.renderShop(); playSfx('buy'); saveGame(this.st);
-    this.say('Old Tarn', 'Pleasure doing business!', 2000);
+
+    // Re-render shop immediately
+    this.updHud();
+    this.renderShop();
+    this.renderTarnUpgrades();
+    playSfx('buy');
+    saveGame(this.st);
+
+    // Show success feedback
+    const upgradeNames = { cannon: 'Cannons', hull: 'Hull', sail: 'Sails' };
+    this.say('Old Tarn', upgradeNames[k] + ' upgraded to Lv ' + this.st.up[k] + '!', 2000);
+    
+    // Show success in Tarn modal if open
+    const successEl = this.$('tarnUpgradeSuccess');
+    if (successEl) {
+      successEl.textContent = '✓ ' + upgradeNames[k] + ' upgraded to Lv ' + this.st.up[k] + '!';
+      successEl.style.opacity = '1';
+      setTimeout(() => { successEl.style.opacity = '0'; }, 2000);
+    }
+
+    // Re-enable button after short delay - recalculate with NEW cost
+    const newCost = (30 + (k === 'hull' ? 10 : k === 'sail' ? 5 : 0)) * (this.st.up[k] + 1);
+    const maxLevel = 8;
+    if (btn) {
+      setTimeout(() => {
+        btn.disabled = this.st.gold < newCost || this.st.up[k] >= maxLevel;
+        if (this.st.up[k] >= maxLevel) {
+          btn.textContent = btn.dataset.n + ' · MAX';
+        } else {
+          btn.textContent = btn.dataset.n + ' · Lv ' + this.st.up[k] + ' · ' + newCost + ' gold';
+        }
+        btn.style.opacity = '1';
+      }, 600);
+    }
   }
   
   // ===== Main Update =====
@@ -598,7 +752,7 @@ export class DriftwakeGame {
       () => this.updHud(),
       () => saveGame(this.st),
       () => this.win(),
-      (got) => { this.$('score').textContent = `Treasure ${got}/${TOTAL_CHESTS}`; },
+      (got) => { if (this.hudScore) this.hudScore.text = `Treasure ${got}/${TOTAL_CHESTS}`; },
       (type, amount) => {
         const result = updateQuestProgress(this.quests, type, amount);
         if (result === 'completed') {
@@ -608,7 +762,8 @@ export class DriftwakeGame {
           this.updQuestHUD();
         }
         this.updQuestHUD();
-      }
+      },
+      (x, y, z) => spawnSparkles(this.sparkleSystem, x, y, z)
     );
     
     if (chest.near && this.st.run) {
@@ -619,7 +774,7 @@ export class DriftwakeGame {
       this.$('dist').textContent = '–';
     }
     
-    if (this.st.run && !this.st.won) { this.st.time += dt; this.$('time').textContent = this.fmt(this.st.time); }
+    if (this.st.run && !this.st.won) { this.st.time += dt; if (this.hudTime) this.hudTime.text = this.fmt(this.st.time); }
     
     // Day/Night
     this.updateDayNight(t);
@@ -646,7 +801,8 @@ export class DriftwakeGame {
       } else if (!this.keys.KeyL) { this.keys._lPressed = false; }
       if (this.keys.KeyF || this.held.fire) {
         const fired = tryFire(this.st, this.scene, this.balls, this.ballMat,
-          this.lockCam, this.lockT, this.D, this.fireCd, this.st.up, playSfx, this.st.waveT);
+          this.lockCam, this.lockT, this.D, this.fireCd, this.st.up, playSfx, this.st.waveT,
+          (x, y, z) => spawnSmoke(this.smokeSystem, x, y, z));
         this.fireCd = fired.fireCd;
         if (fired.waveT != null) this.st.waveT = Math.max(this.st.waveT, fired.waveT);
       }
@@ -739,7 +895,16 @@ export class DriftwakeGame {
     this.hemi.intensity = 0.3 + 0.7 * d;
     this.sun.intensity = 0.1 + 0.45 * d;
     this.seaMat.setFloat('dayK', d);
-    this.beamMat.alpha = 0.3 + 0.5 * (1 - d);
+    this.dayK = d; // Track day/night for glow reduction
+    this.beamMat.alpha = 0.3 + 0.2 * (1 - d); // Reduced night alpha from 0.8 to 0.5
+    
+    // Reduce glow intensity - much weaker overall
+    if (this.glowLayer) {
+      // Very subtle glow: 0.1 at night, 0.15 at day
+      const glowIntensity = 0.1 + 0.05 * d;
+      this.glowLayer.intensity = glowIntensity;
+    }
+    
     this.chests.forEach(c => {
       const mats = c.node.getChildMeshes(false).map(m => m.material).filter(Boolean);
       mats.forEach(m => { if (m.disableLighting && m.alpha != null) m.alpha = this.beamMat.alpha; });
@@ -810,6 +975,13 @@ export class DriftwakeGame {
     // HUD 3D
     // Damage numbers
     if (this.damageNumbers) updateDamageNumbers(this.damageNumbers, dt);
+    
+    // Cannon smoke
+    if (this.smokeSystem) updateSmoke(this.smokeSystem, dt);
+    
+    // Treasure sparkles
+    if (this.sparkleSystem) updateSparkles(this.sparkleSystem, dt);
+    
     this.hud3d();
   }
   
@@ -847,6 +1019,13 @@ export class DriftwakeGame {
     });
     put(this.$('xh'), this.st.run && tgt ? scr(tgt.x, tgt.n.position.y + (tgt.boss ? 4.5 : 2.4), tgt.z) : null);
     this.lockT = this.st.run ? tgt : null;
+    
+    // Glow locked enemy
+    if (this.glowLayer && this.lockT && this.lockT.n) {
+      if (this.lockT.n.getChildMeshes) {
+        this.lockT.n.getChildMeshes().forEach(m => this.glowLayer.addIncludedOnlyMesh(m));
+      }
+    }
   }
   
   // ===== Render Loop =====

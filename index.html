@@ -6,18 +6,16 @@
 <title>Driftwake</title>
 <link rel="icon" type="image/svg+xml" href="favicon.svg">
 <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;700&display=swap" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/babylonjs@7.30.0/babylon.js">
-document.getElementById('tarnQuestBtn').onclick = () => game.handleTarnQuest();
-document.getElementById('tarnClose').onclick = () => game.closeTarnModal();
-</script>
+<script src="https://cdn.jsdelivr.net/npm/babylonjs@7.30.0/babylon.js"></script>
 <style>
-:root{--bg:#9fd8e0;--ink:#0b2a35;--panel:rgba(11,42,53,.68);--text:#f7ebc6;--gold:#ffc857;--coral:#e4572e}
-@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#9fd8e0;--ink:#071c24;--panel:rgba(7,28,36,.76);--text:#f7ebc6}}
+:root{--bg:oklch(85% 0.15 200);--ink:oklch(15% 0.05 230);--panel:rgba(11,42,53,.68);--text:oklch(95% 0.05 90);--gold:oklch(85% 0.25 80);--coral:oklch(60% 0.18 40)}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:oklch(85% 0.15 200);--ink:oklch(12% 0.04 230);--panel:rgba(7,28,36,.76);--text:oklch(95% 0.05 90)}}
 :root[data-theme="dark"]{--bg:#9fd8e0;--ink:#071c24;--panel:rgba(7,28,36,.76);--text:#f7ebc6}
 html,body{height:100%;margin:0;overflow:hidden;background:var(--bg);font-family:Fredoka,system-ui,sans-serif;color:var(--text);-webkit-user-select:none;user-select:none}
 #c{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:none;outline:none}
 .pill{position:fixed;background:var(--panel);border-radius:999px;padding:8px 16px;font-size:18px;font-weight:700}
 #score{top:calc(env(safe-area-inset-top,0px) + 12px);left:12px}
+#hpP{top:calc(env(safe-area-inset-top,0px) + 56px);left:12px}
 #time{top:calc(env(safe-area-inset-top,0px) + 12px);left:50%;transform:translateX(-50%)}
 #compass{position:fixed;top:calc(env(safe-area-inset-top,0px) + 12px);right:12px;width:64px;text-align:center;background:var(--panel);border-radius:18px;padding:6px 0 4px}
 #arrow{width:0;height:0;margin:2px auto;border-left:11px solid transparent;border-right:11px solid transparent;border-bottom:26px solid var(--gold)}
@@ -57,8 +55,14 @@ button.pill{border:0;color:var(--text);font-family:inherit;cursor:pointer}
 #card3{max-width:380px;width:100%;background:var(--ink);border-radius:22px;padding:28px 26px;text-align:center}
 #card3 h1{margin:0 0 8px;font-size:36px;color:var(--gold)}
 #card3 .lab{margin:14px 0 8px;font-size:14px;opacity:.85}
-#card4{max-width:380px;width:100%;background:var(--ink);border-radius:22px;padding:28px 26px;text-align:center}
-#card4 h1{margin:0 0 8px;font-size:32px;color:var(--gold)}
+#card4{max-width:520px;width:90%;max-height:85vh;overflow-y:auto;background:rgba(11,42,53,.9);border-radius:28px;padding:32px 28px;border:2px solid rgba(255,255,255,0.15);box-shadow:0 20px 60px rgba(0,0,0,0.6),0 0 0 1px rgba(255,200,87,0.2)}
+#card4 h1{margin:0;font-size:28px;color:var(--gold)}
+#tarnClose1{width:36px;height:36px;display:flex;align-items:center;justify-content:center;border-radius:50%;background:transparent;border:0;color:var(--text);cursor:pointer}
+#tarnClose1:hover{background:rgba(255,255,255,0.1)}
+.tarn-tab{transition:all 0.2s ease}
+.tarn-tab:hover{background:rgba(255,255,255,0.05)}
+#card4 .buy{font:700 15px Fredoka,system-ui,sans-serif;background:var(--panel);color:var(--text);border:2px solid var(--gold);border-radius:14px;padding:12px;margin-bottom:10px;cursor:pointer;width:100%;text-align:left}
+#card4 .buy:hover{background:rgba(255,200,87,0.1);border-color:var(--gold)}
 #muteBtn{display:block;width:100%;margin:4px 0 8px;font:700 16px Fredoka,system-ui,sans-serif;background:var(--panel);color:var(--text);border:2px solid var(--gold);border-radius:14px;padding:10px;cursor:pointer}
 #diffWarn{display:none;margin:10px 0 0;font-size:14px;line-height:1.35;color:var(--coral)}
 #resume{font:700 18px Fredoka,system-ui,sans-serif;background:var(--gold);color:var(--ink);border:0;border-radius:999px;padding:12px 28px;cursor:pointer;margin-top:16px}
@@ -84,6 +88,21 @@ button.pill{border:0;color:var(--text);font-family:inherit;cursor:pointer}
 .mode.on{border-color:var(--gold);background:rgba(255,200,87,.18);color:var(--gold)}
 .mode:focus-visible{outline:3px solid var(--text);outline-offset:2px}
 #go:focus-visible,.ctl:focus-visible{outline:3px solid var(--text);outline-offset:3px}
+// Glassmorphism Panels
+#card2,#card3,#card4{background:rgba(11,42,53,0.75)!important;backdrop-filter:blur(12px) saturate(1.5);border:1px solid rgba(255,255,255,0.12);box-shadow:0 8px 32px rgba(0,0,0,0.35)}
+#pauseM{background:rgba(7,28,36,0.45)!important;backdrop-filter:blur(16px)}
+#shop{background:rgba(7,28,36,0.45)!important;backdrop-filter:blur(16px)}
+#ov{background:rgba(7,28,36,0.4)!important;backdrop-filter:blur(8px)}
+
+// Glass buttons
+button.pill{background:rgba(255,255,255,0.08)!important;border:1px solid rgba(255,255,255,0.2);backdrop-filter:blur(4px);transition:all 0.2s ease}
+button.pill:hover{background:rgba(255,255,255,0.15)!important;border-color:var(--gold);transform:scale(1.02)}
+button.pill:active{transform:scale(0.95)}
+button.pill{cursor:pointer}
+
+// Interactive elements cursor
+#trade,#pauseBtn,#blk,#bfire,#bl,#br,#bf,#bb{cursor:pointer}
+
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 #quest{top:calc(env(safe-area-inset-top,0px) + 220px);left:12px;font:700 14px Fredoka,system-ui,sans-serif;color:var(--text);background:var(--panel);border-radius:12px;padding:6px 12px;max-width:280px;word-wrap:break-word;z-index:5}
 #combo{top:calc(env(safe-area-inset-top,0px) + 180px);left:12px;font-size:24px;font-weight:800;color:var(--coral);opacity:0;transition:opacity .2s}
@@ -98,7 +117,7 @@ button.pill{border:0;color:var(--text);font-family:inherit;cursor:pointer}
 <div id="compass"><div id="arrow"></div><div id="dist">–</div></div>
 <div id="hint">A / D steer · W sail · Space boost · F fire · L lock = broadside · Esc pause · M mute · T trade · S brake · drag to look around</div>
 <div class="pill" id="toast"></div>
-<div class="pill" id="combo">×</div><div id="quest" style="display:none"></div><div class="pill" id="goldP">Gold 0</div><div class="pill" id="questHUD" style="display:none;top:calc(env(safe-area-inset-top,0px) + 56px);left:12px;font-size:14px;padding:6px 12px"></div>
+<div class="pill" id="hpP">Hull 5/5</div><div class="pill" id="combo">×</div><div id="quest" style="display:none"></div><div class="pill" id="goldP">Gold 0</div><div class="pill" id="questHUD" style="display:none;top:calc(env(safe-area-inset-top,0px) + 56px);left:12px;font-size:14px;padding:6px 12px"></div>
 <button class="pill" id="trade" style="display:none;top:auto;bottom:calc(env(safe-area-inset-bottom,0px) + 110px);left:50%;transform:translateX(-50%);border:0;color:var(--text);font:700 18px Fredoka,system-ui,sans-serif;cursor:pointer">Trade with Tarn (T)</button>
 <button class="ctl" id="bfire" aria-label="Fire cannon">Fire</button>
 <button class="ctl" id="blk" aria-label="Toggle target lock">Lock</button>
@@ -107,26 +126,30 @@ button.pill{border:0;color:var(--text);font-family:inherit;cursor:pointer}
 <div id="bars"><div class="hpb me" id="meBar"><i></i><b></b></div><div id="xh"></div></div>
 <div id="dev" style="display:none"><div id="devP" style="display:none"><button data-a="god">God mode: off</button><button data-a="gold">+100 gold</button><button data-a="heal">Full heal</button><button data-a="sink">Sink all raiders</button><button data-a="tp">Teleport to treasure</button><button data-a="fast">Turbo: off</button><button data-a="reset">Reset save</button><button data-a="tpt">Teleport to Tarn</button><div class="row"><button data-a="day">Day</button><button data-a="night">Night</button><button data-a="auto">Auto</button></div></div><button id="devT">DEV</button></div>
 <div id="shop" style="display:none"><div id="card2"><h1 style="margin:0 0 4px;font-size:32px;color:var(--gold)">Old Tarn's stall</h1><p id="shopGold" style="margin:0 0 10px"></p><button class="buy" id="b_cannon" data-n="Faster cannons"></button><button class="buy" id="b_hull" data-n="Stronger hull"></button><button class="buy" id="b_sail" data-n="Bigger sails"></button><button class="buy" id="shut" style="border-color:transparent">Back to sea</button></div></div>
-<div id="tarnModal" style="display:none;position:fixed;inset:0;z-index:30;background:rgba(7,28,36,.85)">
-  <div id="card4" style="max-width:420px;width:100%">
-    <h1 style="margin:0 0 4px;font-size:28px;color:var(--gold);text-align:center">Old Tarn's Trading Post</h1>
+<div id="tarnModal" style="display:none;position:fixed;inset:0;z-index:30;background:rgba(7,28,36,.65);backdrop-filter:blur(20px) saturate(1.5)">
+  <div id="card4" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);max-width:520px;width:90%;max-height:85vh;overflow-y:auto;background:rgba(11,42,53,.9);border-radius:28px;padding:32px 28px;border:2px solid rgba(255,255,255,0.15);box-shadow:0 20px 60px rgba(0,0,0,0.6),0 0 0 1px rgba(255,200,87,0.2)">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+      <h1 style="margin:0;font-size:28px;color:var(--gold)">Old Tarn's Trading Post</h1>
+      <button type="button" id="tarnClose1" style="font:700 18px Fredoka,system-ui,sans-serif;background:transparent;color:var(--text);border:0;border-radius:50%;padding:8px;cursor:pointer;width:36px;height:36px;display:flex;align-items:center;justify-content:center">✕</button>
+    </div>
     
-    <div class="tarn-tabs" style="display:flex;gap:4px;margin-bottom:16px">
-      <button type="button" class="tarn-tab active" data-tab="quests" style="flex:1;font:700 14px Fredoka,system-ui,sans-serif;background:var(--gold);color:var(--ink);border:0;border-radius:10px;padding:10px;cursor:pointer">📜 Quests</button>
-      <button type="button" class="tarn-tab" data-tab="upgrades" style="flex:1;font:700 14px Fredoka,system-ui,sans-serif;background:var(--panel);color:var(--text);border:2px solid var(--gold);border-radius:10px;padding:10px;cursor:pointer">⚙️ Upgrades</button>
+    <div class="tarn-tabs" style="display:flex;gap:2px;margin-bottom:20px;border-bottom:1px solid rgba(255,255,255,0.1)">
+      <button type="button" class="tarn-tab active" data-tab="quests" style="flex:1;font:700 14px Fredoka,system-ui,sans-serif;background:transparent;color:var(--gold);border:0;border-bottom:3px solid var(--gold);padding:10px 16px;cursor:pointer">📜 Quests</button>
+      <button type="button" class="tarn-tab" data-tab="upgrades" style="flex:1;font:700 14px Fredoka,system-ui,sans-serif;background:transparent;color:rgba(247,235,198,0.5);border:0;border-bottom:3px solid transparent;padding:10px 16px;cursor:pointer">⚙️ Upgrades</button>
     </div>
 
     <div id="tarn-quests-panel" class="tarn-panel" style="display:block">
-      <div id="tarn-quest-list" style="max-height:280px;overflow-y:auto;margin-bottom:12px"></div>
-      <button type="button" id="tarnClose1" style="width:100%;font:700 16px Fredoka,system-ui,sans-serif;background:var(--panel);color:var(--text);border:2px solid var(--gold);border-radius:999px;padding:10px;cursor:pointer">Back to Sea</button>
+      <div id="tarn-quest-list" style="max-height:300px;overflow-y:auto;margin-bottom:20px"></div>
+      <button type="button" id="tarnQuestBtn" style="width:100%;font:700 16px Fredoka,system-ui,sans-serif;background:linear-gradient(135deg,var(--gold),#e6b800);color:var(--ink);border:0;border-radius:14px;padding:14px;cursor:pointer;box-shadow:0 4px 15px rgba(255,200,87,0.4)">Claim / View Quest</button>
+      <button type="button" id="tarnClose1" style="width:100%;margin-top:12px;font:700 16px Fredoka,system-ui,sans-serif;background:rgba(255,255,255,0.1);color:var(--text);border:1px solid rgba(255,255,255,0.2);border-radius:14px;padding:12px;cursor:pointer">Back to Sea</button>
     </div>
 
     <div id="tarn-upgrades-panel" class="tarn-panel" style="display:none">
-      <p id="tarnShopGold" style="margin:0 0 10px;text-align:center;color:var(--gold)"></p>
-      <button class="buy" id="tarn_b_cannon" data-n="Faster cannons"></button>
-      <button class="buy" id="tarn_b_hull" data-n="Stronger hull"></button>
-      <button class="buy" id="tarn_b_sail" data-n="Bigger sails"></button>
-      <button type="button" id="tarnClose2" style="width:100%;margin-top:8px;font:700 16px Fredoka,system-ui,sans-serif;background:var(--panel);color:var(--text);border:2px solid var(--gold);border-radius:999px;padding:10px;cursor:pointer">Back to Sea</button>
+      <p id="tarnShopGold" style="margin:0 0 20px;text-align:center;color:var(--gold);font-size:16px"></p>
+      <button class="buy" id="tarn_b_cannon" data-n="Faster cannons" style="font:700 15px Fredoka,system-ui,sans-serif"></button>
+      <button class="buy" id="tarn_b_hull" data-n="Stronger hull" style="font:700 15px Fredoka,system-ui,sans-serif"></button>
+      <button class="buy" id="tarn_b_sail" data-n="Bigger sails" style="font:700 15px Fredoka,system-ui,sans-serif"></button>
+      <button type="button" id="tarnClose2" style="width:100%;margin-top:20px;font:700 16px Fredoka,system-ui,sans-serif;background:rgba(255,255,255,0.1);color:var(--text);border:1px solid rgba(255,255,255,0.2);border-radius:14px;padding:12px;cursor:pointer">Back to Sea</button>
     </div>
   </div>
 </div>
@@ -176,6 +199,31 @@ const game = new DriftwakeGame(canvas);
 game.init();
 game.initDev();
 
+// Tarn modal buttons (wrapped in DOMContentLoaded to ensure elements exist)
+document.addEventListener('DOMContentLoaded', () => {
+  const tarnQuestBtn = document.getElementById('tarnQuestBtn');
+  const tarnClose1 = document.getElementById('tarnClose1');
+  const tarnClose2 = document.getElementById('tarnClose2');
+  if (tarnQuestBtn) tarnQuestBtn.onclick = () => game.handleTarnQuest();
+  if (tarnClose1) tarnClose1.onclick = () => game.closeTarnModal();
+  if (tarnClose2) tarnClose2.onclick = () => game.closeTarnModal();
+
+  // Shop buttons
+  ['cannon','hull','sail'].forEach(k => {
+    const btn = document.getElementById('tarn_b_'+k);
+    if (btn) btn.onclick = () => game.buyUpgrade(k);
+  });
+
+  // Tarn tab buttons
+  document.querySelectorAll('.tarn-tab').forEach(btn => {
+    btn.onclick = () => game.switchTarnTab(btn.dataset.tab);
+  });
+
+  // Keyboard shortcuts
+  document.addEventListener('keydown', e => { if (e.code === 'KeyM' && !e.repeat) { import('./src/audio.js').then(m => { m.toggleMute(); game.syncMute(); }); } });
+  document.addEventListener('keydown', e => { if (e.code === 'KeyT' && !e.repeat && game.st.run) { if (game.tradeOpen) game.closeShop(); else if (Math.hypot(game.tarnX - game.st.x, game.tarnZ - game.st.z) < 38) game.showTarnModal(); else game.say("Captain Mara", "Old Tarn's island is too far. Line up the ⚓ on the compass!", 2600); } });
+});
+
 // Global error handler
 window.addEventListener('error', e => {
   if (window.__eb) return; window.__eb = 1;
@@ -196,15 +244,6 @@ document.getElementById('trade').onclick = () => game.openShop();
 ['cannon','hull','sail'].forEach(k => document.getElementById('b_'+k).onclick = () => game.buyUpgrade(k));
 document.getElementById('blk').onclick = e => { game.lockCam = !game.lockCam; e.currentTarget.classList.toggle('on', game.lockCam); game.say('Camera', game.lockCam ? 'Target lock ON' : 'Target lock off', 1400); };
 document.querySelectorAll('.mode').forEach(b => b.onclick = () => game.setDifficulty(b.dataset.m));
-document.addEventListener('keydown', e => { if (e.code === 'KeyM' && !e.repeat) { import('./src/audio.js').then(m => { m.toggleMute(); game.syncMute(); }); } });
-document.addEventListener('keydown', e => { if (e.code === 'KeyT' && !e.repeat && game.st.run) { if (game.tradeOpen) game.closeShop(); else if (Math.hypot(game.tarnX - game.st.x, game.tarnZ - game.st.z) < 38) game.showTarnModal(); else game.say('Captain Mara', "Old Tarn's island is too far. Line up the ⚓ on the compass!", 2600); } });
-
-document.querySelectorAll('.tarn-tab').forEach(btn => {
-  btn.onclick = () => game.switchTarnTab(btn.dataset.tab);
-});
-document.getElementById('tarnClose1').onclick = () => game.closeTarnModal();
-document.getElementById('tarnClose2').onclick = () => game.closeTarnModal();
-['cannon','hull','sail'].forEach(k => document.getElementById('tarn_b_'+k).onclick = () => game.buyUpgrade(k));
 </script>
 </body>
 </html>

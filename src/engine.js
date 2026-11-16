@@ -30,11 +30,18 @@ export function createEngine(canvas) {
   lamp.range = 32;
   lamp.intensity = 0;
   
-  // Enable shadows
-  const shadowGenerator = new BABYLON.ShadowGenerator(2048, sun);
+  // Enable shadows - improved quality
+  const shadowGenerator = new BABYLON.ShadowGenerator(4096, sun);
   shadowGenerator.useBlurExponentialShadowMap = true;
   shadowGenerator.blurScale = 2;
-  shadowGenerator.darkness = 0.4;
+  shadowGenerator.darkness = 0.35;
+  
+  // Cascaded shadow maps for better distant shadows
+  shadowGenerator.useCloseExponentialShadowMap = true;
+  
+  // Shadow bias to reduce acne
+  shadowGenerator.bias = 0.0005;
+  shadowGenerator.normalBias = 0.02;
   
   return { 
     engine, 

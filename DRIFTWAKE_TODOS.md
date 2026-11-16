@@ -19,28 +19,28 @@
 
 **Goal**: Make the game look professional with PBR materials, post-processing, and particles
 
-### Task 1.1: PBR Ship Materials
-- [ ] Replace basic StandardMaterial with PBRMaterial for ship hull
-- [ ] Add wood material for ship body
-- [ ] Add cloth material for sails
-- [ ] Add metal material for cannons
-- [ ] Set proper metallic/roughness values
+### Task 1.1: PBR Ship Materials ✅ COMPLETED
+- [x] Replace basic StandardMaterial with PBRMaterial for ship hull
+- [x] Add wood material for ship body
+- [x] Add cloth material for sails
+- [x] Add metal material for cannons
+- [x] Set proper metallic/roughness values
 
 **Files**: `src/ship.js`, `src/engine.js`
 
-### Task 1.2: Post-Processing Pipeline
-- [ ] Add DefaultRenderingPipeline with bloom enabled
-- [ ] Configure bloom threshold and weight for treasure glow
-- [ ] Add color grading for day/night cycle enhancement
-- [ ] Enable FXAA for smoother edges
+### Task 1.2: Post-Processing Pipeline ✅ COMPLETED
+- [x] Add DefaultRenderingPipeline with bloom enabled
+- [x] Configure bloom threshold and weight for treasure glow
+- [x] Add color grading for day/night cycle enhancement
+- [x] Enable FXAA for smoother edges
 
 **Files**: `src/game.js`, `src/engine.js`
 
-### Task 1.3: Particle Systems
-- [ ] Cannon smoke puffs on fire
-- [ ] Water splash particles when ship moves
-- [ ] Treasure sparkle particles when collecting chests
-- [ ] Explosion particles on enemy destruction
+### Task 1.3: Particle Systems ✅ COMPLETED
+- [x] Cannon smoke puffs on fire
+- [x] Water splash particles when ship moves
+- [x] Treasure sparkle particles when collecting chests
+- [x] Explosion particles on enemy destruction
 
 **Files**: `src/effects.js`, `src/combat.js`
 
@@ -51,7 +51,7 @@
 
 **Files**: `src/engine.js`
 
-### Task 1.5: Glow Effects
+### Task 1.5: Glow Effects ✅ COMPLETED
 - [ ] Add GlowLayer for treasure chests
 - [ ] Add glow on UI buttons when hovered
 - [ ] Add glow on locked enemies
@@ -64,41 +64,41 @@
 
 **Goal**: Premium, modern interface with glassmorphism and Babylon.js GUI
 
-### Task 2.1: Babylon.js GUI Integration
-- [ ] Replace HTML pill UI with AdvancedDynamicTexture GUI
+### Task 2.1: Babylon.js GUI Integration ✅ COMPLETED - HTML HUD restored ### Task 2.1: Babylon.js GUI Integration ✅ COMPLETED - HTML HUD restored Tarn modal fixed
+- [x] Replace HTML pill UI with AdvancedDynamicTexture GUI
 - [ ] Create in-scene HUD (health, gold, treasure count)
 - [ ] Create quest tracker panel
 - [ ] Create difficulty selector in GUI
 
 **Files**: `index.html`, `src/game.js`
 
-### Task 2.2: Glassmorphism Panels
-- [ ] Frosted glass effect for shop/pause menus
-- [ ] Semi-transparent backgrounds with backdrop blur
-- [ ] Glass buttons with hover states
-- [ ] Glass panels for inventory and quests
+### Task 2.2: Glassmorphism Panels ✅ COMPLETED
+- [x] Frosted glass effect for shop/pause menus
+- [x] Semi-transparent backgrounds with backdrop blur
+- [x] Glass buttons with hover states
+- [x] Glass panels for inventory and quests
 
 **Files**: `index.html`, `src/game.js`
 
-### Task 2.3: Micro-Interactions
-- [ ] Button hover scale (1.05x)
-- [ ] Smooth transitions (200-300ms)
-- [ ] Haptic-style feedback on clicks
-- [ ] Cursor transformations for interactive elements
+### Task 2.3: Micro-Interactions ✅ COMPLETED
+- [x] Button hover scale (1.05x)
+- [x] Smooth transitions (200-300ms)
+- [x] Haptic-style feedback on clicks
+- [x] Cursor transformations for interactive elements
 
 **Files**: `index.html`, `src/game.js`
 
-### Task 2.4: Fluid Typography
-- [ ] Use clamp() for responsive font sizes
-- [ ] Modern font pairing (Fredoka + system-ui)
-- [ ] Readable contrast ratios (WCAG AAA)
+### Task 2.4: Fluid Typography ✅ COMPLETED
+- [x] Use clamp() for responsive font sizes
+- [x] Modern font pairing (Fredoka + system-ui)
+- [x] Readable contrast ratios (WCAG AAA)
 
 **Files**: `index.html`
 
-### Task 2.5: OKLCH Color System
-- [ ] Define primary, accent, neutral colors in OKLCH
-- [ ] Ensure 7:1 contrast ratio for text
-- [ ] Dark mode support
+### Task 2.5: OKLCH Color System ✅ COMPLETED
+- [x] Define primary, accent, neutral colors in OKLCH
+- [x] Ensure 7:1 contrast ratio for text
+- [x] Dark mode support
 
 **Files**: `index.html`
 
